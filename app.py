@@ -3,7 +3,7 @@ import pandas as pd
 import json
 import os
 
-st.set_page_config(page_title="Yogibo 売上管理ダッシュボード", layout="wide", page_icon="📊")
+st.set_page_config(page_title="Yogibo 売上管理ダッシュボード", layout="wide", page_icon="📊", initial_sidebar_state="collapsed")
 
 # ─────────────────────────────────────────────
 # グローバルCSS（M PLUS 1p フォント＋デザイン）
@@ -19,160 +19,252 @@ html, body, [class*="css"], .stMarkdown, .stText, button, input, select, textare
     font-family: 'M PLUS 1p', sans-serif !important;
 }}
 
-/* ヘッダー全体 */
-.yg-header {{
-    display: flex;
-    align-items: center;
-    gap: 24px;
-    background: linear-gradient(135deg, #e8f8f8 0%, #d6f0f0 60%, #c8ecec 100%);
-    border-radius: 16px;
-    padding: 18px 32px;
-    margin-bottom: 4px;
-    box-shadow: 0 4px 16px rgba(74,190,190,0.2);
-    border: 1px solid #a8d8d8;
-}}
-.yg-header img {{
-    height: 52px;
-    object-fit: contain;
-    background: #000000;
-    border-radius: 10px;
-    padding: 6px 12px;
-}}
-.yg-header-divider {{
-    width: 2px;
-    height: 44px;
-    background: #b0cce8;
-    border-radius: 2px;
-}}
-.yg-header-title {{
-    color: #1a3a5c;
-    font-size: 1.55rem;
-    font-weight: 800;
-    letter-spacing: 0.02em;
-    margin: 0;
-    line-height: 1.2;
-}}
-.yg-header-sub {{
-    color: #4a90d9;
-    font-size: 0.78rem;
-    font-weight: 500;
-    margin-top: 3px;
-}}
-
-/* CSVアップロードエリア */
-.upload-section {{
-    background: #f5fafa;
-    border: 2px solid #7cc8c8;
-    border-radius: 12px;
-    padding: 16px 20px;
-    margin-bottom: 16px;
-}}
-.upload-section-title {{
-    font-size: 0.88rem;
-    font-weight: 700;
-    color: #1a6060;
-    margin-bottom: 10px;
-}}
-
-/* サイドバー */
-section[data-testid="stSidebar"] {{
-    background: #f4f6fb !important;
-}}
-section[data-testid="stSidebar"] .stSelectbox label,
-section[data-testid="stSidebar"] .stMultiSelect label {{
-    font-weight: 700 !important;
-    color: #1a2a4a !important;
-}}
-
-/* タブ */
-.stTabs [data-baseweb="tab"] {{
-    font-weight: 700;
-    font-size: 0.95rem;
-}}
-
-/* KPIカード */
-[data-testid="stMetric"] {{
-    background: #f8fafd;
-    border: 1px solid #dde4f0;
-    border-radius: 12px;
-    padding: 12px 16px !important;
-}}
-[data-testid="stMetricLabel"] {{ font-weight: 700 !important; font-size: 0.82rem !important; }}
-[data-testid="stMetricValue"] {{ font-size: 1.05rem !important; font-weight: 800 !important; }}
-[data-testid="stMetricDelta"] {{ font-size: 0.72rem !important; }}
-/* delta_color="off"（グレー）のときを黄色に上書き */
-[data-testid="stMetricDelta"][style*="color: rgb(49, 51, 63)"],
-[data-testid="stMetricDelta"][style*="color: gray"],
-[data-testid="stMetricDelta"][style*="color: grey"] {{
-    color: #d07000 !important;
-}}
-
-/* メインコンテンツの上部余白を詰める */
-.block-container {{ padding-top: 0rem !important; padding-left: 2rem !important; padding-right: 2rem !important; }}
-/* StreamlitのファイルアップロードUIのデフォルト枠線・背景を非表示 */
-[data-testid="stFileUploaderDropzone"] {{
-    border: 1.5px dashed #7cc8c8 !important;
-    background: #ffffff !important;
-    border-radius: 8px !important;
-    padding: 10px !important;
-}}
-/* アップロードUIの英語テキストを非表示にしてCSSで上書き */
-[data-testid="stFileUploaderDropzoneInstructions"] {{
-    display: none !important;
-}}
-[data-testid="stFileUploaderDropzone"]::before {{
-    content: "ここにファイルをドロップ";
-    display: block;
-    font-size: 0.85rem !important;
-    font-family: 'M PLUS 1p', sans-serif !important;
-    color: #555;
-    margin-bottom: 6px;
-}}
-[data-testid="stFileUploaderDropzone"] button {{
-    font-size: 0 !important;
-    position: relative;
-    background: #e0f4f4 !important;
-    border: 1px solid #7cc8c8 !important;
-    border-radius: 8px !important;
-}}
-[data-testid="stFileUploaderDropzone"] button::after {{
-    content: "ファイルを選択";
-    font-size: 0.82rem !important;
-    font-family: 'M PLUS 1p', sans-serif !important;
-    color: #1a6060;
-}}
-/* Streamlitのデフォルト上部余白を消す */
+/* ── Streamlit不要UIを非表示 ── */
 header[data-testid="stHeader"] {{ display: none !important; }}
 #MainMenu {{ display: none !important; }}
 footer {{ display: none !important; }}
+.block-container {{ padding-top: 0 !important; padding-left: 2rem !important; padding-right: 2rem !important; padding-bottom: 2rem !important; }}
+[data-testid="stAppViewContainer"] > .main {{ padding-top: 0 !important; }}
+[data-testid="stAppViewBlockContainer"] {{ padding-top: 0 !important; padding-left: 1.5rem !important; padding-right: 1.5rem !important; }}
+div[class="appview-container"] section[class="main"] {{ padding-top: 0 !important; }}
+section[data-testid="stSidebar"] {{ display: none !important; }}
+[data-testid="collapsedControl"] {{ display: none !important; }}
+.stTabs [data-baseweb="tab-panel"] {{ padding: 0 !important; }}
+/* 指標タブのスタイル */
+.stTabs [data-baseweb="tab"] {{ font-weight: 700 !important; font-size: 0.82rem !important; }}
+.stTabs [data-baseweb="tab"][aria-selected="true"] {{ color: #58b5ca !important; border-bottom: 3px solid #58b5ca !important; }}
+/* ランキングテーブルヘッダー */
+[data-testid="stDataFrame"] th {{ background-color: #58b5ca !important; color: white !important; font-weight: bold !important; }}
+[data-testid="stDataFrame"] tr:nth-child(even) td {{ background-color: #f0f9fb !important; }}
+
+/* ── コンテンツ余白・呼吸感 ── */
+[data-testid="stHorizontalBlock"] {{ gap: 12px !important; }}
+[data-testid="column"] > div {{ padding: 0 4px !important; }}
+[data-testid="stVerticalBlock"] > [data-testid="stVerticalBlockBorderWrapper"] {{ margin-bottom: 8px !important; }}
+.element-container {{ margin-bottom: 4px !important; }}
+
+/* ── ヘッダー（Yogibo公式サイト風・波形） ── */
+.yg-header-wrap {{
+    background: #58b5ca;
+    position: relative;
+    margin-bottom: 0;
+    margin-top: 0;
+}}
+.yg-header {{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 8px 32px 12px 32px;
+    position: relative;
+    z-index: 2;
+}}
+.yg-header-center {{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}}
+.yg-header img {{
+    height: 42px;
+    object-fit: contain;
+    filter: brightness(0) invert(1);
+}}
+.yg-header-divider {{
+    width: 1px;
+    height: 28px;
+    background: rgba(255,255,255,0.5);
+}}
+.yg-header-title {{
+    color: #595959;
+    font-size: 1.3rem;
+    font-weight: 800;
+    margin: 0;
+    letter-spacing: 0.02em;
+}}
+.yg-header-sub {{
+    color: rgba(255,255,255,0.92);
+    font-size: 0.72rem;
+    font-weight: 400;
+    margin-top: 4px;
+    letter-spacing: 0.03em;
+}}
+.yg-wave {{
+    line-height: 0;
+    margin-top: -1px;
+}}
+.yg-wave svg {{ display: block; width: 100%; }}
+
+/* ── ナビゲーション ── */
+.yg-page-content {{ padding: 16px 32px; }}
+
+/* ── KPIカード ── */
+[data-testid="stMetric"] {{
+    background: #ffffff;
+    border: 1px solid #e8f4f4;
+    border-radius: 12px;
+    padding: 14px 16px !important;
+    box-shadow: 0 2px 8px rgba(61,189,189,0.08);
+}}
+[data-testid="stMetricLabel"] {{ font-weight: 700 !important; font-size: 0.75rem !important; color: #6a9a9a !important; }}
+[data-testid="stMetricValue"] {{ font-size: 1.1rem !important; font-weight: 800 !important; color: #1a3a3a !important; }}
+[data-testid="stMetricDelta"] {{ font-size: 0.72rem !important; }}
+[data-testid="stMetricDelta"][style*="color: rgb(49, 51, 63)"],
+[data-testid="stMetricDelta"][style*="color: gray"],
+[data-testid="stMetricDelta"][style*="color: grey"] {{ color: #d07000 !important; }}
+/* KPIカードの正(green)デルタを#58b5caに上書き */
+[data-testid="stMetricDelta"][style*="color: rgb(9, 171, 59)"] {{ color: #58b5ca !important; }}
+[data-testid="stMetricDelta"][style*="color: rgb(0, 128, 0)"] {{ color: #58b5ca !important; }}
+[data-testid="stMetricDelta"] svg {{ display: none; }}
+/* 前年グラフ線の色（2本目の線）をグレーに */
+[data-testid="stArrowVegaLiteChart"] g.mark-line:nth-child(2) path {{ stroke: #595959 !important; opacity: 0.6; }}
+
+/* ── ナビボタン ── */
+div[data-testid="stButton"] button {{
+    font-family: 'M PLUS 1p', sans-serif !important;
+    font-weight: 700 !important;
+    border-radius: 8px !important;
+    transition: all 0.15s !important;
+}}
+div[data-testid="stButton"] button[kind="primary"] {{
+    background: #58b5ca !important;
+    color: #ffffff !important;
+    border: none !important;
+    box-shadow: 0 2px 8px rgba(61,189,189,0.25) !important;
+}}
+div[data-testid="stButton"] button[kind="secondary"] {{
+    background: #ffffff !important;
+    color: #3a8a8a !important;
+    border: 1.5px solid #b0e0e0 !important;
+}}
+div[data-testid="stButton"] button[kind="secondary"]:hover {{
+    background: #e8f8f8 !important;
+    color: #2a7070 !important;
+}}
+
+/* ── 設定パネル ── */
+.yg-upload-panel {{
+    background: #f8fefe;
+    border: 1px solid #d0eeee;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+}}
+.yg-upload-title {{
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #2a7070;
+    margin-bottom: 12px;
+}}
+
+/* ── アップロードUI日本語化 ── */
+[data-testid="stFileUploaderDropzone"] {{
+    border: 1.5px dashed #a0d8d8 !important;
+    background: #ffffff !important;
+    border-radius: 8px !important;
+    padding: 8px !important;
+}}
+[data-testid="stFileUploaderDropzoneInstructions"] {{ display: none !important; }}
+[data-testid="stFileUploaderDropzone"]::before {{
+    content: "ここにドロップ";
+    display: block;
+    font-size: 0.82rem !important;
+    font-family: 'M PLUS 1p', sans-serif !important;
+    color: #4a8888;
+    margin-bottom: 4px;
+}}
+[data-testid="stFileUploaderDropzone"] button {{
+    font-size: 0 !important;
+    background: #e0f4f4 !important;
+    border: 1px solid #a0d8d8 !important;
+    border-radius: 6px !important;
+}}
+[data-testid="stFileUploaderDropzone"] button::after {{
+    content: "ファイルを選択";
+    font-size: 0.78rem !important;
+    font-family: 'M PLUS 1p', sans-serif !important;
+    color: #1a6060;
+}}
+
+/* ── 週ボタン ── */
+.week-btn {{
+    padding: 5px 14px;
+    border-radius: 20px;
+    border: 1.5px solid #b0e0e0;
+    background: #ffffff;
+    color: #3a8a8a;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'M PLUS 1p', sans-serif;
+    transition: all 0.12s;
+    white-space: nowrap;
+}}
+.week-btn:hover {{ background: #e8f8f8; }}
+.week-btn.active {{ background: #58b5ca; color: #ffffff; border-color: #58b5ca; }}
 </style>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
 # ヘッダー描画
 # ─────────────────────────────────────────────
-# セッション：メニュー開閉状態
-if "menu_open" not in st.session_state:
-    st.session_state.menu_open = True
+# ─────────────────────────────────────────────
+# ナビゲーション＋設定パネル
+# ─────────────────────────────────────────────
+if 'current_page' not in st.session_state:
+    st.session_state.current_page = 'top'
+if 'show_settings' not in st.session_state:
+    st.session_state.show_settings = False
+if 'menu_open' not in st.session_state:
+    st.session_state.menu_open = False
 
-h_col1, h_col2 = st.columns([10, 1])
-with h_col1:
-    st.markdown(f"""
-<div class="yg-header">
-  <img src="data:{LOGO_MIME};base64,{LOGO_B64}" alt="Yogibo logo">
-  <div class="yg-header-divider"></div>
-  <div style="flex:1;">
-    <div class="yg-header-title">エリアAM 売上管理ダッシュボード</div>
-    <div class="yg-header-sub">Powered by Yogibo Japan</div>
+# ヘッダー
+st.markdown(f"""
+<div class='yg-header-wrap'>
+  <div class='yg-header'>
+    <div class='yg-header-center'>
+      <div class='yg-header-title'>売上管理ダッシュボード</div>
+      <div class='yg-header-sub'>上期目標：<strong>客数</strong>前年100％🔥　<strong>座数</strong>前年100％🔥</div>
+    </div>
+  </div>
+  <div class='yg-wave'>
+    <svg viewBox='0 0 1440 32' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none' style='height:32px;'>
+      <path d='M0,16 C180,32 360,0 540,16 C720,32 900,0 1080,16 C1260,32 1350,8 1440,16 L1440,32 L0,32 Z' fill='#ffffff'/>
+    </svg>
   </div>
 </div>
 """, unsafe_allow_html=True)
-with h_col2:
-    st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-    if st.button("☰", key="menu_toggle", help="絞り込みメニューを開閉"):
-        st.session_state.menu_open = not st.session_state.menu_open
+
+# ナビゲーションのコンテンツに余白を追加
+st.markdown('<div style="padding: 0 16px;">', unsafe_allow_html=True)
+
+# ナビゲーションバー
+nav_pages = [
+    ('top',     '🏠 TOP'),
+    ('summary', '📋 サマリー'),
+    ('detail',  '📈 実績・前年比'),
+    ('history', '🗓️ 期間分析'),
+    ('report',  '📨 会社別レポート'),
+    ('target',  '🎯 目標カレンダー'),
+    ('master',  '🏪 マスタ編集'),
+]
+nav_cols = st.columns([1.3, 1.3, 1.3, 1.3, 1.6, 1.4, 1.3, 1])
+for ni, (page_id, label) in enumerate(nav_pages):
+    if nav_cols[ni].button(label, key=f'nav_{page_id}', use_container_width=True,
+                           type='primary' if st.session_state.current_page==page_id else 'secondary'):
+        st.session_state.current_page = page_id
+        st.rerun()
+with nav_cols[7]:
+    if st.button('⚙️ 設定', key='nav_settings', use_container_width=True):
+        st.session_state.show_settings = not st.session_state.show_settings
+        st.session_state.menu_open = st.session_state.show_settings
         st.rerun()
 
+st.markdown('<hr style="margin:0 0 12px 0;border:none;border-top:1px solid #e0eeee;">', unsafe_allow_html=True)
+
+
+# ヘッダー描画
 # ─────────────────────────────────────────────
 # 定数
 # ─────────────────────────────────────────────
@@ -196,7 +288,7 @@ DEFAULT_STORES = [
     {"店舗コード": "ASU", "店舗ID": "269", "店舗名": "イオンモール須坂",       "代行会社": "(有)サーティーンストラット", "エリア": "北陸・甲信越","AM名": "渡邊"},
 ]
 
-KEY_METRICS    = ["受注金額(税抜)", "客数", "CVR", "客単価", "座数", "品数", "8ステップ数", "坪単価"]
+KEY_METRICS    = ["受注金額(税抜)", "客数", "CVR", "客単価", "座数", "品数"]
 AVG_METRICS    = {"CVR", "客単価"}
 TARGET_METRICS = ["受注金額(税抜)", "座数"]
 
@@ -220,9 +312,17 @@ def save_master(stores):
 TARGET_FILE = "targets.json"
 
 def load_targets():
+    import datetime
     if os.path.exists(TARGET_FILE):
         with open(TARGET_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+        # 月次自動リセット：保存時の年月と現在の年月が違えば削除
+        saved_ym = data.get("_saved_ym", "")
+        current_ym = datetime.date.today().strftime("%Y%m")
+        if saved_ym and saved_ym != current_ym:
+            os.remove(TARGET_FILE)
+            return {}
+        return {k: v for k, v in data.items() if k != "_saved_ym"}
     return {}
 
 def save_targets(targets):
@@ -231,15 +331,19 @@ def save_targets(targets):
 
 def load_targets_from_csv(sales_file, target_sales_file, target_zasu_file, master_df):
     """
-    目標CSVから期間内の日別目標を合計して月間目標dictを返す
-    sales_file: 今年の売上CSV（期間特定用）
+    目標CSVから日別目標をマスタ店舗IDで紐付けて返す。
+    目標CSVのE列店舗名はシステム名と異なる場合があるため、
+    K列(店舗ID数字)とマスタの店舗IDで紐付ける。
     """
-    # 今年CSVから期間を取得
-    sales_df = load_csv(sales_file)
-    date_cols = get_date_cols(sales_df)
-    if not date_cols:
-        return {}
-    period_dates = set(date_cols)  # "2026/03/01" 形式
+    import datetime as _dt_tgt
+
+    # マスタから 店舗ID → 店舗名 のマッピングを作成
+    id_to_name = {}
+    for _, row in master_df.iterrows():
+        sid = str(row.get('店舗ID', '') or '').strip()
+        sname = str(row.get('店舗名', '') or '').strip()
+        if sid and sname and sid != 'nan':
+            id_to_name[sid] = sname
 
     targets = {}
     metric_map = {
@@ -252,18 +356,48 @@ def load_targets_from_csv(sales_file, target_sales_file, target_zasu_file, maste
             continue
         tfile.seek(0)
         tdf = pd.read_csv(tfile, encoding="utf-8", header=None)
+
         # E列=4(店舗名), F列=5(日付), M列=12(目標値)
+        if tdf.shape[1] <= 12:
+            continue
         tdf = tdf[[4, 5, 12]].copy()
         tdf.columns = ["店舗名", "日付", "目標値"]
         tdf = tdf.dropna(subset=["店舗名", "日付", "目標値"])
-        tdf = tdf[~tdf["店舗名"].isin(["受注目標","座数目標","スマレジ店舗ID"])]
-        tdf["目標値"] = pd.to_numeric(tdf["目標値"].astype(str).str.replace(",",""), errors="coerce")
+
+        # ヘッダー・集計行を除外（店舗名が実店舗名でない行）
+        exclude = ["受注目標", "座数目標", "スマレジ店舗ID", "nan", "NaN", "店舗名"]
+        tdf["店舗名"] = tdf["店舗名"].astype(str).str.strip()
+        tdf = tdf[~tdf["店舗名"].isin(exclude)]
+        tdf = tdf[tdf["店舗名"].str.len() > 1]
+
+        # 目標値を数値化
+        tdf["目標値"] = pd.to_numeric(
+            tdf["目標値"].astype(str).str.replace(",", ""), errors="coerce"
+        )
         tdf = tdf.dropna(subset=["目標値"])
+        tdf = tdf[tdf["目標値"] > 0]
 
-        # 期間内の日付に絞って店舗ごとに合計
-        tdf = tdf[tdf["日付"].isin(period_dates)]
+        # 日付を正規化: "2026/8/1" → "2026/08/01"
+        def _norm_date(d):
+            try:
+                parts = str(d).strip().split('/')
+                return f"{int(parts[0])}/{int(parts[1]):02d}/{int(parts[2]):02d}"
+            except:
+                return None
+        tdf["日付"] = tdf["日付"].apply(_norm_date)
+        tdf = tdf.dropna(subset=["日付"])
+
+        # マスタに存在する店舗名のみに絞る（店舗名で直接照合）
+        master_stores = set(master_df['店舗名'].dropna().astype(str).str.strip())
+        tdf = tdf[tdf["店舗名"].isin(master_stores)]
+
+        # 日別目標を保存: "店舗名_指標_YYYY/MM/DD" = 値
+        for _, row in tdf.iterrows():
+            date_key = f"{row['店舗名']}_{metric}_{row['日付']}"
+            targets[date_key] = str(int(row["目標値"]))
+
+        # 月間目標（日別の合計）も店舗ごとに保存
         store_totals = tdf.groupby("店舗名")["目標値"].sum()
-
         for sname, total in store_totals.items():
             targets[f"{sname}_{metric}"] = str(int(total))
 
@@ -278,6 +412,7 @@ def to_numeric_safe(series):
         errors="coerce"
     )
 
+@st.cache_data(show_spinner=False)
 def load_csv_cached(file_bytes: bytes) -> pd.DataFrame:
     """バイト列からCSVを読み込み（キャッシュ対応）"""
     import io
@@ -295,10 +430,12 @@ def load_csv(file):
 def get_date_cols(df):
     return [c for c in df.columns if str(c)[:4].isdigit() and "/" in str(c)]
 
-def to_long_cached(sales_bytes: bytes, store_names_tuple: tuple, label: str, master_bytes: bytes) -> pd.DataFrame:
-    import io
+@st.cache_data(show_spinner=False)
+def to_long_cached(sales_bytes: bytes, store_names_tuple: tuple, label: str, master_json_str: str) -> pd.DataFrame:
+    """全期間のlong形式DataFrameをキャッシュ。期間絞込はこの後に行う。"""
+    import json
     sales_df  = load_csv_cached(sales_bytes)
-    master_df = pd.read_csv(io.BytesIO(master_bytes), encoding="utf-8") if master_bytes else pd.DataFrame(DEFAULT_STORES)
+    master_df = pd.DataFrame(json.loads(master_json_str))
     return _to_long_impl(sales_df, list(store_names_tuple), label, master_df)
 
 def to_long(sales_df, store_names, label, master_df):
@@ -349,19 +486,219 @@ def _to_long_impl(sales_df, store_names, label, master_df):
                 })
     return pd.DataFrame(rows)
 
+# ─────────────────────────────────────────────
+# 履歴データ保存
+# 同じ「店舗コード・日付・指標」は後から取り込んだ値で更新する。
+# ローカル運用ではアプリを閉じてもCSVに残り、バックアップも出力できる。
+# ─────────────────────────────────────────────
+HISTORY_SALES_FILE = "sales_history.csv"
+HISTORY_TARGET_FILE = "targets_history.csv"
+HISTORY_COLUMNS = ["店舗名", "店舗コード", "代行会社", "エリア", "日付", "指標", "値"]
+
+def _empty_history():
+    return pd.DataFrame(columns=HISTORY_COLUMNS)
+
+def load_history(path):
+    if not os.path.exists(path):
+        return _empty_history()
+    try:
+        df = pd.read_csv(path, encoding="utf-8-sig")
+        if "日付" in df.columns:
+            df["日付"] = pd.to_datetime(df["日付"], errors="coerce")
+        if "値" in df.columns:
+            df["値"] = pd.to_numeric(df["値"], errors="coerce")
+        return df.dropna(subset=["日付", "指標", "値"])
+    except Exception:
+        return _empty_history()
+
+def save_history(df, path):
+    out = df.copy()
+    out["日付"] = pd.to_datetime(out["日付"], errors="coerce").dt.strftime("%Y-%m-%d")
+    out.to_csv(path, index=False, encoding="utf-8-sig")
+
+def merge_history(existing, incoming, path):
+    if incoming is None or incoming.empty:
+        return existing, 0
+    incoming = incoming[HISTORY_COLUMNS].copy()
+    incoming["日付"] = pd.to_datetime(incoming["日付"], errors="coerce")
+    incoming["値"] = pd.to_numeric(incoming["値"], errors="coerce")
+    incoming = incoming.dropna(subset=["日付", "指標", "値"])
+    before = len(existing)
+    combined = pd.concat([existing, incoming], ignore_index=True)
+    combined = combined.drop_duplicates(
+        subset=["店舗コード", "店舗名", "日付", "指標"], keep="last"
+    ).sort_values(["日付", "店舗名", "指標"])
+    save_history(combined, path)
+    return combined, max(len(combined) - before, 0)
+
+def long_to_history(long_df):
+    if long_df is None or long_df.empty:
+        return _empty_history()
+    out = long_df.rename(columns={"日付_原本": "日付"}).copy()
+    out["日付"] = pd.to_datetime(out["日付"], errors="coerce")
+    return out[HISTORY_COLUMNS].dropna(subset=["日付", "指標", "値"])
+
+def target_bytes_to_history(file_bytes, metric_name, master_df):
+    if not file_bytes:
+        return _empty_history()
+    import io
+    try:
+        df = pd.read_csv(io.BytesIO(file_bytes), encoding="utf-8", header=None)
+        if df.shape[1] <= 12:
+            return _empty_history()
+        df = df[[4, 5, 12]].copy()
+        df.columns = ["店舗名", "日付", "値"]
+        df["店舗名"] = df["店舗名"].astype(str).str.strip()
+        df["日付"] = pd.to_datetime(df["日付"], errors="coerce")
+        df["値"] = pd.to_numeric(df["値"].astype(str).str.replace(",", ""), errors="coerce")
+        meta = master_df[["店舗名", "店舗コード", "代行会社", "エリア"]].drop_duplicates("店舗名")
+        df = df.merge(meta, on="店舗名", how="inner")
+        df["指標"] = metric_name
+        return df[HISTORY_COLUMNS].dropna(subset=["日付", "値"])
+    except Exception:
+        return _empty_history()
+
+def fiscal_period_range(fiscal_year, period_kind, period_value=None):
+    """3月期首。fiscal_yearは期首年（例: 2026年度=2026/03〜2027/02）。"""
+    import datetime
+    if period_kind == "年度":
+        import calendar
+        end_year = fiscal_year + 1
+        return datetime.date(fiscal_year, 3, 1), datetime.date(end_year, 2, calendar.monthrange(end_year, 2)[1])
+    if period_kind == "半期":
+        month = 3 if period_value == "上期" else 9
+        start = datetime.date(fiscal_year, month, 1)
+        end_month = 8 if period_value == "上期" else 2
+        end_year = fiscal_year if period_value == "上期" else fiscal_year + 1
+        end_day = 28 if end_month == 2 else 31
+        return start, datetime.date(end_year, end_month, end_day)
+    q_months = {"Q1": 3, "Q2": 6, "Q3": 9, "Q4": 12}
+    month = q_months.get(period_value, 3)
+    start = datetime.date(fiscal_year, month, 1)
+    end_month = month + 2
+    end_year = fiscal_year
+    if end_month > 12:
+        end_month -= 12
+        end_year += 1
+    import calendar
+    return start, datetime.date(end_year, end_month, calendar.monthrange(end_year, end_month)[1])
+
 def yoy_delta(now, prev):
+    """前年比を返す（100%基準）例：前年比103%→3.0ではなく103.0を返す"""
     if pd.isna(now) or pd.isna(prev) or prev==0: return None
-    return (now-prev)/abs(prev)*100
+    return now/abs(prev)*100
 
 def color_delta(val):
     if pd.isna(val): return ""
-    return "color: #2ecc71" if val>=0 else "color: #e74c3c"
+    return "color: #58b5ca" if val>=100 else "color: #cc2200"
 
 def color_achievement(val):
     if pd.isna(val): return ""
-    if val >= 100: return "color: #2ecc71; font-weight:bold"
+    if val >= 100: return "color: #58b5ca; font-weight:bold"
     if val >= 80:  return "color: #f39c12"
     return "color: #e74c3c"
+
+
+# ─────────────────────────────────────────────
+# 曜日合わせ用ヘルパー
+# ─────────────────────────────────────────────
+def get_yoy_prev_days(now_dates_md, mode="dow", now_year=None, prev_year=None):
+    """
+    今年の月日リスト(MM/DD)に対して、前年の対応月日を返す。
+    mode="dow" : 前年同曜日合わせ（52週前=364日前、常に同曜日）
+    mode="day" : 日合わせ（同じMM/DD）
+    now_dates_md: ["04/01", "04/02", ...] 形式のリスト
+    戻り値: {今年MM/DD: 前年MM/DD} の辞書
+    """
+    import datetime
+    if now_year is None:
+        now_year = datetime.date.today().year
+    if prev_year is None:
+        prev_year = now_year - 1
+
+    mapping = {}
+    for md in now_dates_md:
+        try:
+            m, d = int(md.split('/')[0]), int(md.split('/')[1])
+            if mode == "dow":
+                # 52週前（364日）= 必ず同曜日
+                now_date  = datetime.date(now_year, m, d)
+                prev_date = now_date - datetime.timedelta(weeks=52)
+            else:
+                prev_date = datetime.date(prev_year, m, d)
+            mapping[md] = f"{prev_date.month:02d}/{prev_date.day:02d}"
+        except:
+            pass
+    return mapping
+
+def get_yoy_prev_days_from_prev(prev_dates_md, mode="dow", now_year=None, prev_year=None):
+    """
+    前年CSVの月日から「今年MM/DD→前年MM/DD」の逆引きマップを返す。
+    mode="dow" : 52週前の逆引き（+364日）
+    mode="day" : 日合わせ
+    """
+    import datetime
+    if now_year is None:
+        now_year = datetime.date.today().year
+    if prev_year is None:
+        prev_year = now_year - 1
+
+    mapping = {}  # {今年MM/DD: 前年MM/DD}
+    for md in prev_dates_md:
+        try:
+            m, d = int(md.split('/')[0]), int(md.split('/')[1])
+            if mode == "dow":
+                # 前年日付 + 364日 = 今年の対応日付
+                prev_date = datetime.date(prev_year, m, d)
+                now_date  = prev_date + datetime.timedelta(weeks=52)
+            else:
+                now_date = datetime.date(now_year, m, d)
+            now_md = f"{now_date.month:02d}/{now_date.day:02d}"
+            mapping[now_md] = md
+        except:
+            pass
+    return mapping
+
+# ─────────────────────────────────────────────
+# targets辞書の高速検索用インデックスをsession_stateにキャッシュ
+# ─────────────────────────────────────────────
+def _build_target_index(targets: dict) -> dict:
+    """
+    targets辞書を {(sname, metric, year, month): [(day, value)]} の形に変換。
+    get_target_mtd が毎回全走査しなくて済むようにする。
+    """
+    import datetime
+    index = {}
+    for k, v in targets.items():
+        # キー形式: "店舗名_指標_YYYY/MM/DD"
+        parts = k.rsplit('_', 1)
+        if len(parts) != 2:
+            continue
+        prefix, date_str = parts
+        try:
+            dp = date_str.split('/')
+            d = datetime.date(int(dp[0]), int(dp[1]), int(dp[2]))
+        except:
+            continue
+        # prefix = "店舗名_指標" を分解
+        # 指標名には '_' が含まれないので rsplit で右から1回だけ分割
+        pm = prefix.rsplit('_', 1)
+        if len(pm) != 2:
+            continue
+        sname, metric = pm
+        key = (sname, metric, d.year, d.month)
+        if key not in index:
+            index[key] = []
+        index[key].append((d, float(v)))
+    return index
+
+# targets が変わった時だけ再ビルド
+_targets_hash = hash(str(sorted(st.session_state.get('targets', {}).items())))
+if st.session_state.get('_targets_index_hash') != _targets_hash:
+    st.session_state['_target_index'] = _build_target_index(
+        st.session_state.get('targets', {})
+    )
+    st.session_state['_targets_index_hash'] = _targets_hash
 
 # ─────────────────────────────────────────────
 # セッション初期化
@@ -376,34 +713,15 @@ master_df = pd.DataFrame(st.session_state.stores)
 # ─────────────────────────────────────────────
 # メニューパネル（開閉切り替え）
 # ─────────────────────────────────────────────
-if st.session_state.get("menu_open", True):
-    with st.container():
-        st.markdown("""
-        <div style="background:#e8f8f8;border-radius:12px;padding:16px 20px;margin-bottom:12px;border:1px solid #a8d8d8;">
-        <div style="font-size:0.88rem;font-weight:700;color:#1a6060;margin-bottom:10px;">🔧 絞り込み設定</div>
-        </div>
-        """, unsafe_allow_html=True)
-        menu_col1, menu_col2, menu_col3 = st.columns([2, 2, 4])
-        with menu_col1:
-            am_list_m = ["すべて"] + sorted(master_df["AM名"].unique().tolist())
-            selected_am = st.selectbox("エリアマネージャー", am_list_m, key="main_am")
-        with menu_col2:
-            agencies_m = ["すべて"] + sorted(master_df["代行会社"].unique().tolist())
-            selected_agency = st.selectbox("代行会社", agencies_m, key="main_agency")
-        with menu_col3:
-            filtered_m = master_df.copy()
-            if selected_am != "すべて":
-                filtered_m = filtered_m[filtered_m["AM名"] == selected_am]
-            if selected_agency != "すべて":
-                filtered_m = filtered_m[filtered_m["代行会社"] == selected_agency]
-            store_options_m = filtered_m["店舗名"].tolist()
-            selected_stores = st.multiselect("店舗（複数選択可）", store_options_m, default=store_options_m, key="main_stores")
-else:
-    # メニューが閉じているときはデフォルト値を使用
-    selected_am      = "すべて"
-    selected_agency  = "すべて"
-    selected_stores  = master_df["店舗名"].tolist()
-
+# デフォルト絞り込み値（設定パネルで上書き）
+if 'main_am' not in st.session_state: st.session_state.main_am = 'すべて'
+if 'main_agency' not in st.session_state: st.session_state.main_agency = 'すべて'
+selected_am      = st.session_state.get('main_am', 'すべて')
+selected_agency  = st.session_state.get('main_agency', 'すべて')
+filtered_def = master_df.copy()
+if selected_am != 'すべて': filtered_def = filtered_def[filtered_def['AM名']==selected_am]
+if selected_agency != 'すべて': filtered_def = filtered_def[filtered_def['代行会社']==selected_agency]
+selected_stores = st.session_state.get('main_stores', filtered_def['店舗名'].tolist()) or filtered_def['店舗名'].tolist()
 # ─────────────────────────────────────────────
 # CSVファイルパス定数（フォルダに置くだけで自動読み込み）
 # ─────────────────────────────────────────────
@@ -433,61 +751,191 @@ def save_uploaded(uploaded_file, save_path):
         uploaded_file.seek(0)
 
 # ─────────────────────────────────────────────
-# CSVアップロードエリア（タイトル下・メインに配置）
 # ─────────────────────────────────────────────
-with st.container():
-    st.markdown('<div class="upload-section">', unsafe_allow_html=True)
-    st.markdown('<div class="upload-section-title">📂 CSVアップロード　<span style="font-size:0.75rem;font-weight:400;color:#2a7070;">※一度アップロードすると次回から自動で読み込まれます</span></div>', unsafe_allow_html=True)
-    up_col1, up_col2, up_col3, up_col4 = st.columns(4)
-    with up_col1:
-        uploaded_now_raw  = st.file_uploader("【今年】日別実績CSV", type="csv", key="now")
-        if uploaded_now_raw:
-            save_uploaded(uploaded_now_raw, CSV_NOW)
-    with up_col2:
-        uploaded_prev_raw = st.file_uploader("【前年】日別実績CSV", type="csv", key="prev")
-        if uploaded_prev_raw:
-            save_uploaded(uploaded_prev_raw, CSV_PREV)
-    with up_col3:
-        uploaded_target_sales_raw = st.file_uploader("【目標】受注金額CSV", type="csv", key="target_sales")
-        if uploaded_target_sales_raw:
-            save_uploaded(uploaded_target_sales_raw, CSV_TSALES)
-    with up_col4:
-        uploaded_target_zasu_raw  = st.file_uploader("【目標】座数CSV", type="csv", key="target_zasu")
-        if uploaded_target_zasu_raw:
-            save_uploaded(uploaded_target_zasu_raw, CSV_TZASU)
-    st.markdown('</div>', unsafe_allow_html=True)
+# 設定パネル（⚙️ボタンで開閉）
+# ─────────────────────────────────────────────
+if st.session_state.get('show_settings', False):
+    with st.container():
+        st.markdown('<div class="yg-upload-panel">', unsafe_allow_html=True)
+        st.markdown('<div class="yg-upload-title">⚙️ 設定・CSVアップロード　<span style="font-size:0.72rem;font-weight:400;color:#4a8888;">※一度アップロードすると次回から自動読み込み</span></div>', unsafe_allow_html=True)
 
-# アップロードがなければローカル保存ファイルを使用
+        # 絞り込み設定
+        st.markdown('**🔧 絞り込み**')
+        flt1, flt2, flt3 = st.columns([2,2,4])
+        with flt1:
+            am_list_m = ['すべて'] + sorted(master_df['AM名'].unique().tolist())
+            selected_am = st.selectbox('エリアマネージャー', am_list_m, key='main_am')
+        with flt2:
+            agencies_m = ['すべて'] + sorted(master_df['代行会社'].unique().tolist())
+            selected_agency = st.selectbox('代行会社', agencies_m, key='main_agency')
+        with flt3:
+            filtered_m = master_df.copy()
+            if selected_am != 'すべて': filtered_m = filtered_m[filtered_m['AM名']==selected_am]
+            if selected_agency != 'すべて': filtered_m = filtered_m[filtered_m['代行会社']==selected_agency]
+            store_options_m = filtered_m['店舗名'].tolist()
+            selected_stores = st.multiselect('店舗', store_options_m, default=store_options_m, key='main_stores')
+
+        st.markdown('---')
+        st.markdown('**📁 CSVアップロード**')
+        up_col1, up_col2, up_col3, up_col4 = st.columns(4)
+        with up_col1:
+            uploaded_now_raw = st.file_uploader('【今年】日別実績CSV', type='csv', key='now')
+            if uploaded_now_raw: save_uploaded(uploaded_now_raw, CSV_NOW)
+        with up_col2:
+            uploaded_prev_raw = st.file_uploader('【前年】日別実績CSV', type='csv', key='prev')
+            if uploaded_prev_raw: save_uploaded(uploaded_prev_raw, CSV_PREV)
+        with up_col3:
+            uploaded_target_sales_raw = st.file_uploader('【目標】受注金額CSV', type='csv', key='target_sales')
+            if uploaded_target_sales_raw: save_uploaded(uploaded_target_sales_raw, CSV_TSALES)
+        with up_col4:
+            uploaded_target_zasu_raw = st.file_uploader('【目標】座数CSV', type='csv', key='target_zasu')
+            if uploaded_target_zasu_raw: save_uploaded(uploaded_target_zasu_raw, CSV_TZASU)
+        st.markdown('</div>', unsafe_allow_html=True)
+else:
+    # 設定パネル非表示時はデフォルト値を使用
+    uploaded_now_raw = None
+    uploaded_prev_raw = None
+    uploaded_target_sales_raw = None
+    uploaded_target_zasu_raw = None
+    selected_am = 'すべて'
+    selected_agency = 'すべて'
+    selected_stores = master_df['店舗名'].tolist()
+
+# ローカル保存CSVを使用
 uploaded_now          = uploaded_now_raw          or file_to_uploadedfile(CSV_NOW)
 uploaded_prev         = uploaded_prev_raw         or file_to_uploadedfile(CSV_PREV)
 uploaded_target_sales = uploaded_target_sales_raw or file_to_uploadedfile(CSV_TSALES)
 uploaded_target_zasu  = uploaded_target_zasu_raw  or file_to_uploadedfile(CSV_TZASU)
 
-# 読み込み済みファイルのステータス表示
-status_parts = []
-if uploaded_now:          status_parts.append("✅ 今年CSV")
-if uploaded_prev:         status_parts.append("✅ 前年CSV")
-if uploaded_target_sales: status_parts.append("✅ 受注目標")
-if uploaded_target_zasu:  status_parts.append("✅ 座数目標")
-missing = []
-if not uploaded_now:          missing.append("⚠️ 今年CSV")
-if not uploaded_prev:         missing.append("前年CSV（任意）")
-if not uploaded_target_sales: missing.append("受注目標（任意）")
-if not uploaded_target_zasu:  missing.append("座数目標（任意）")
-if status_parts:
-    st.caption("　".join(status_parts) + ("　　" + "　".join(missing) if missing else ""))
+# ─────────────────────────────────────────────
+# ① CSVバイト列をsession_stateにキャッシュ
+#    ファイルが変わったときだけ読み直す（毎回read()しない）
+# ─────────────────────────────────────────────
+def _get_bytes(uploaded_file, ss_key):
+    """ファイルオブジェクトからバイト列を取得し、session_stateにキャッシュ"""
+    if uploaded_file is None:
+        st.session_state.pop(ss_key, None)
+        return None
+    uploaded_file.seek(0)
+    b = uploaded_file.read()
+    uploaded_file.seek(0)
+    # ファイル内容が変わった場合はlong_dfキャッシュも無効化
+    if st.session_state.get(ss_key) != b:
+        st.session_state[ss_key] = b
+        # 関連するlong_dfキャッシュをクリア
+        if ss_key == '_csv_bytes_now':
+            st.session_state.pop('_long_now', None)
+        elif ss_key == '_csv_bytes_prev':
+            st.session_state.pop('_long_prev', None)
+    return st.session_state[ss_key]
 
-
+_now_bytes   = _get_bytes(uploaded_now,          '_csv_bytes_now')
+_prev_bytes  = _get_bytes(uploaded_prev,         '_csv_bytes_prev')
+_tsales_bytes = _get_bytes(uploaded_target_sales, '_csv_bytes_tsales')
+_tzasu_bytes  = _get_bytes(uploaded_target_zasu,  '_csv_bytes_tzasu')
 
 # ─────────────────────────────────────────────
+# ② long形式DataFrameをsession_stateにキャッシュ
+#    ページ遷移しても再計算しない
+# ─────────────────────────────────────────────
+import json as _json_cache
+_master_json_cache = _json_cache.dumps(master_df.to_dict('records'), ensure_ascii=False)
+_stores_tuple = tuple(selected_stores)
+
+if _now_bytes and ('_long_now' not in st.session_state or
+                   st.session_state.get('_long_now_stores') != _stores_tuple):
+    st.session_state['_long_now'] = to_long_cached(_now_bytes, _stores_tuple, '今年', _master_json_cache)
+    st.session_state['_long_now_stores'] = _stores_tuple
+
+if _prev_bytes and ('_long_prev' not in st.session_state or
+                    st.session_state.get('_long_prev_stores') != _stores_tuple):
+    st.session_state['_long_prev'] = to_long_cached(_prev_bytes, _stores_tuple, '前年', _master_json_cache)
+    st.session_state['_long_prev_stores'] = _stores_tuple
+
+_long_now_cached  = st.session_state.get('_long_now',  pd.DataFrame())
+_long_prev_cached = st.session_state.get('_long_prev', pd.DataFrame())
+
+# アップロード済み実績・目標を履歴へ自動追記（全店舗対象、重複は更新）
+_history_key = (
+    hash(_now_bytes) if _now_bytes else None,
+    hash(_prev_bytes) if _prev_bytes else None,
+    hash(_tsales_bytes) if _tsales_bytes else None,
+    hash(_tzasu_bytes) if _tzasu_bytes else None,
+    hash(_master_json_cache),
+)
+if st.session_state.get('_history_import_key') != _history_key:
+    _sales_history = load_history(HISTORY_SALES_FILE)
+    _target_history = load_history(HISTORY_TARGET_FILE)
+    _all_store_tuple = tuple(master_df['店舗名'].dropna().tolist())
+    if _now_bytes:
+        _all_now = to_long_cached(_now_bytes, _all_store_tuple, '実績', _master_json_cache)
+        _sales_history, _ = merge_history(_sales_history, long_to_history(_all_now), HISTORY_SALES_FILE)
+    if _prev_bytes:
+        _all_prev = to_long_cached(_prev_bytes, _all_store_tuple, '実績', _master_json_cache)
+        _sales_history, _ = merge_history(_sales_history, long_to_history(_all_prev), HISTORY_SALES_FILE)
+    if _tsales_bytes:
+        _target_history, _ = merge_history(
+            _target_history,
+            target_bytes_to_history(_tsales_bytes, '受注金額(税抜)', master_df),
+            HISTORY_TARGET_FILE,
+        )
+    if _tzasu_bytes:
+        _target_history, _ = merge_history(
+            _target_history,
+            target_bytes_to_history(_tzasu_bytes, '座数', master_df),
+            HISTORY_TARGET_FILE,
+        )
+    st.session_state['_history_import_key'] = _history_key
+    st.session_state['_sales_history'] = _sales_history
+    st.session_state['_target_history'] = _target_history
+else:
+    _sales_history = st.session_state.get('_sales_history', load_history(HISTORY_SALES_FILE))
+    _target_history = st.session_state.get('_target_history', load_history(HISTORY_TARGET_FILE))
+
+# ─────────────────────────────────────────────
+# ③ 目標CSV読み込みをここで1回だけ実行（重複排除）
+#    目標ファイルが変わったときだけ再計算
+# ─────────────────────────────────────────────
+_target_key = (
+    hash(_tsales_bytes) if _tsales_bytes else None,
+    hash(_tzasu_bytes)  if _tzasu_bytes  else None,
+)
+if (_tsales_bytes and _tzasu_bytes and _now_bytes and
+        st.session_state.get('_target_csv_key') != _target_key):
+    try:
+        import io as _io_tgt
+        _sf = _io_tgt.BytesIO(_now_bytes);   _sf.name = CSV_NOW
+        _tf = _io_tgt.BytesIO(_tsales_bytes); _tf.name = CSV_TSALES
+        _zf = _io_tgt.BytesIO(_tzasu_bytes);  _zf.name = CSV_TZASU
+        _csv_tgts = load_targets_from_csv(_sf, _tf, _zf, master_df)
+        if _csv_tgts:
+            _merged = {**st.session_state.targets, **_csv_tgts}
+            st.session_state.targets = _merged
+            save_targets(_merged)
+        st.session_state['_target_csv_key'] = _target_key
+    except Exception as _e:
+        st.sidebar.error(f"目標CSV読み込みエラー: {_e}")
+
+
+# ステータスバー（小さく表示）
+
 # メインタブ
 # ─────────────────────────────────────────────
-tab_overview, tab_main, tab_target, tab_master = st.tabs(["📋 全体サマリー", "📈 実績・前年比", "🎯 目標管理", "🏪 店舗マスタ編集"])
+tab_overview, tab_main, tab_target, tab_master = st.tabs([' ', ' ', ' ', ' '])
+
+# ナビゲーションとタブを連動
+_page = st.session_state.get('current_page', 'summary')
+if _page == 'summary':  _active_tab = tab_overview
+elif _page == 'detail': _active_tab = tab_main
+elif _page == 'target': _active_tab = tab_target
+elif _page == 'master': _active_tab = tab_master
+else: _active_tab = tab_overview
+
 
 # ══════════════════════════════════════════════
 # TAB 0: 全体サマリー
 # ══════════════════════════════════════════════
-with tab_overview:
+if st.session_state.get('current_page', 'top') in ('top', 'summary'):
     import calendar as cal_mod
     import datetime
 
@@ -499,320 +947,740 @@ with tab_overview:
         st.warning("左サイドバーで店舗を1つ以上選択してください。")
         st.stop()
 
-    ov_sales_now  = load_csv(uploaded_now)
-    ov_sales_prev = load_csv(uploaded_prev) if uploaded_prev else None
-    ov_has_prev   = ov_sales_prev is not None
+    ov_has_prev = not _long_prev_cached.empty
 
-    # CSVの全日付を取得
-    date_cols_all = get_date_cols(ov_sales_now)
+    # CSVの全日付を long_now_cached の日付_原本から取得（load_csv不要）
+    if not _long_now_cached.empty and '日付_原本' in _long_now_cached.columns:
+        date_cols_all = sorted(_long_now_cached['日付_原本'].unique())
+    else:
+        date_cols_all = []
     all_dates_dt  = [pd.to_datetime(d) for d in date_cols_all]
     csv_years     = sorted(set(d.year for d in all_dates_dt), reverse=True)
 
     # ── 期間フィルター UI ──
-    st.markdown("### 📅 集計期間を選択")
-    fc1, fc2, fc3 = st.columns([1, 1, 2])
+    if st.session_state.get('current_page', 'top') == 'top':
+        # MTDデータ取得：session_stateのキャッシュ済みlong_dfを使用（高速）
+        _top_long_now  = _long_now_cached.copy() if not _long_now_cached.empty else pd.DataFrame()
+        _top_long_prev = _long_prev_cached.copy() if not _long_prev_cached.empty else pd.DataFrame()
 
-    with fc1:
-        sel_year = st.selectbox("年", csv_years, index=0, key="ov_year")
+        # MTDカットオフ：「昨日」を基準にする（CSVに未来日付が含まれる場合を考慮）
+        import datetime as _dt_mtd
+        _yesterday = _dt_mtd.date.today() - _dt_mtd.timedelta(days=1)
+        _yesterday_md = f"{_yesterday.month:02d}/{_yesterday.day:02d}"  # 例: "04/02"
+        _top_dates_all = sorted(_top_long_now['月日'].unique()) if not _top_long_now.empty else []
+        # 昨日以前のデータのみに絞り込む（今年・前年とも同じ月日で比較）
+        _top_dates = [d for d in _top_dates_all if d <= _yesterday_md]
+        _top_cutoff = _top_dates[-1] if _top_dates else (_top_dates_all[-1] if _top_dates_all else None)
+        # 月文字列（"04" など）を先に定義
+        _cutoff_month_str = f"{_yesterday.month:02d}"
+        # 今年実績：同月・昨日まで
+        if _top_cutoff:
+            _top_long_now = _top_long_now[
+                (_top_long_now['月日'].str.split('/').str[0] == _cutoff_month_str) &
+                (_top_long_now['月日'] <= _top_cutoff)
+            ]
+        # 前年：前年CSVの月日から今年対応日を逆引き → 今年MTD範囲に絞る
+        if not _top_long_prev.empty:
+            _prev_all_days = list(_top_long_prev['月日'].unique())
+            _top_reverse_map = get_yoy_prev_days_from_prev(_prev_all_days, mode="dow")
+            # 今年MTD内の日付に対応する前年月日のみ取得
+            _top_now_days = set(_top_long_now['月日'].unique()) if not _top_long_now.empty else set()
+            _top_prev_days = {prev_md for now_md, prev_md in _top_reverse_map.items() if now_md in _top_now_days}
+            _top_dow_map = {now_md: prev_md for now_md, prev_md in _top_reverse_map.items() if now_md in _top_now_days}
+            _top_prev = _top_long_prev[_top_long_prev['月日'].isin(_top_prev_days)] if _top_prev_days else pd.DataFrame()
+        else:
+            _top_prev = _top_long_prev
+            _top_dow_map = {}
+        # ランキングタイトル
+        _latest_date = _top_cutoff if _top_cutoff else '—'
+        try:
+            _m2, _d2 = _latest_date.split('/')
+            _date_label = f'{int(_m2)}/{int(_d2)}'
+        except:
+            _date_label = _latest_date
+        # ── TOP KPIカード ──
+        st.markdown('### 📌 エリア全体 KPI（MTD）')
+        # _yesterday は上のMTDカットオフブロックで定義済み（_dt_mtd使用）
+        _this_month = _yesterday.month
+        _this_year  = _yesterday.year
+        _filtered_targets = {}
+        for _fk, _fv in st.session_state.targets.items():
+            parts = _fk.rsplit('_', 1)
+            if len(parts) == 2:
+                try:
+                    _fd = pd.to_datetime(parts[1])
+                    if _fd.year == _this_year and _fd.month == _this_month and _fd.date() <= _yesterday:
+                        _filtered_targets[_fk] = _fv
+                except: pass
 
-    with fc2:
-        month_nums = sorted(set(d.month for d in all_dates_dt if d.year == sel_year), reverse=True)
-        sel_month_label = st.selectbox("月", [f"{m}月" for m in month_nums], index=0, key="ov_month")
-        sel_month_num   = int(sel_month_label.replace("月", ""))
-
-    with fc3:
-        # 月曜始まり・日曜終わりで週を生成
-        weeks_in_month = cal_mod.monthcalendar(sel_year, sel_month_num)
-        week_options = ["月間累計"]
-        week_date_ranges = [None]
-        for wi, wdays in enumerate(weeks_in_month):
-            actual = [d for d in wdays if d != 0]
-            s_day, e_day = actual[0], actual[-1]
-            s_dt = datetime.date(sel_year, sel_month_num, s_day)
-            e_dt = datetime.date(sel_year, sel_month_num, e_day)
-            dow_jp = ["月","火","水","木","金","土","日"]
-            s_dow  = dow_jp[s_dt.weekday()]
-            e_dow  = dow_jp[e_dt.weekday()]
-            label  = f"W{wi+1}  {sel_month_num}/{s_day}({s_dow}) 〜 {sel_month_num}/{e_day}({e_dow})"
-            week_options.append(label)
-            week_date_ranges.append((s_dt, e_dt))
-
-        sel_week_label = st.selectbox("週", week_options, index=0, key="ov_week")
-        sel_week_idx   = week_options.index(sel_week_label)
-        sel_week_range = week_date_ranges[sel_week_idx]
-
-    # 期間に合わせて日付列を絞り込み
-    if sel_week_range is None:
-        date_filter = [
-            d for d in date_cols_all
-            if pd.to_datetime(d).year == sel_year and pd.to_datetime(d).month == sel_month_num
+        _kpi_items = [
+            ('受注金額(税抜)', '💴', '円'),
+            ('座数',          '🪑', ''),
+            ('客数',          '👥', '人'),
+            ('CVR',           '📈', '%'),
+            ('客単価',        '🏷️', '円'),
         ]
-    else:
-        s_dt, e_dt = sel_week_range
-        date_filter = [
-            d for d in date_cols_all
-            if s_dt <= pd.to_datetime(d).date() <= e_dt
+        _kpi_cols = st.columns(5)
+        for _ki, (_metric, _icon, _unit) in enumerate(_kpi_items):
+            _sub = _top_long_now[_top_long_now['指標']==_metric]['値']
+            _val = _sub.mean() if _metric in AVG_METRICS else _sub.sum()
+            if _metric == 'CVR': _label = f'{_val:.1f}%'
+            elif _metric == '客単価': _label = f'{_val:,.0f}円'
+            elif _metric == '座数': _label = f'{int(_val):,}人'
+            elif _unit == '円': _label = f'{_val:,.0f}円'
+            elif _unit == '人': _label = f'{int(_val):,}人'
+            else: _label = f'{int(_val):,}'
+            # 目標比 or 前年比
+            _delta_str = None
+            _delta_color = 'normal'
+            if _metric in ['受注金額(税抜)', '座数']:
+                _tgt_total = 0.0
+                for _s in selected_stores:
+                    for _dk, _dv in _filtered_targets.items():
+                        if _dk.startswith(f'{_s}_{_metric}_'):
+                            try:
+                                _tgt_total += float(_dv)
+                            except:
+                                pass
+                if _tgt_total == 0:
+                    _tgt_total = sum(
+                        float(st.session_state.targets[f'{s}_{_metric}'])
+                        for s in selected_stores
+                        if f'{s}_{_metric}' in st.session_state.targets
+                    )
+                if _tgt_total > 0:
+                    _ach = _val / _tgt_total * 100
+                    _delta_str = f'目標比MTD {_ach:.1f}%'
+                    _delta_color = 'normal' if _ach >= 100 else ('off' if _ach >= 90 else 'inverse')
+            if _delta_str is None and not _top_prev.empty:
+                _sub_p = _top_prev[_top_prev['指標']==_metric]['値']
+                _vp = _sub_p.mean() if _metric in AVG_METRICS else _sub_p.sum()
+                if not pd.isna(_vp) and _vp != 0:
+                    _yoy = _val / _vp * 100
+                    _delta_str = f'前年比MTD {_yoy:.1f}%'
+                    _delta_color = 'normal' if _yoy >= 100 else ('off' if _yoy >= 90 else 'inverse')
+            _kpi_cols[_ki].metric(f'{_icon} {_metric}', _label, delta=_delta_str, delta_color=_delta_color)
+        st.divider()
+
+        st.markdown('### 🏆 本日時点 ランキング（上位10店舗）')
+        st.caption(f'📅 {_date_label} 時点のデータ')
+
+        # ─── ランキングキャッシュキーを生成（データが変わった時だけ再計算）───
+        _rank_cache_key = (
+            hash(str(_top_long_now.shape)) if not _top_long_now.empty else 0,
+            hash(str(_top_prev.shape))     if not _top_prev.empty     else 0,
+            hash(str(sorted(st.session_state.get('targets', {}).items()))[:200]),
+            str(selected_stores[:3]),  # 先頭3店舗で代表
+        )
+
+        # ─── ランキング生成関数（3列：店舗名・実績・達成率or前年比）───
+        def _make_ranking(metric, show_target=True, ascending=False):
+            rows = []
+            for sname in selected_stores:
+                sub_n = _top_long_now[(_top_long_now['店舗名']==sname)&(_top_long_now['指標']==metric)]['値']
+                vn = sub_n.mean() if metric in AVG_METRICS else sub_n.sum()
+                if pd.isna(vn): vn = 0
+                # 実績フォーマット
+                if metric in ['受注金額(税抜)','客単価']:   実績 = f'{vn:,.0f}円'
+                elif metric in ['客数','座数']:              実績 = f'{vn:,.0f}人'
+                elif metric == 'CVR':                        実績 = f'{vn:.1f}%'
+                else:                                        実績 = f'{vn:,.0f}'
+                sort_val = vn
+                rate_str = '—'
+                if show_target:
+                    tgt = 0.0
+                    for _dk, _dv in _filtered_targets.items():
+                        if _dk.startswith(f'{sname}_{metric}_'):
+                            try: tgt += float(_dv)
+                            except: pass
+                    if tgt == 0:
+                        tgt_str = st.session_state.targets.get(f'{sname}_{metric}')
+                        if tgt_str: tgt = float(tgt_str)
+                    if tgt > 0:
+                        ach = vn / tgt * 100
+                        rate_str = f'{round(ach):,}%'
+                        sort_val = ach
+                    else:
+                        sort_val = 0
+                else:
+                    if not _top_prev.empty:
+                        sub_p = _top_prev[(_top_prev['店舗名']==sname)&(_top_prev['指標']==metric)]['値']
+                        vp = sub_p.mean() if metric in AVG_METRICS else sub_p.sum()
+                        if not pd.isna(vp) and vp != 0:
+                            yoy = vn / vp * 100
+                            rate_str = f'{round(yoy):,}%'
+                            sort_val = yoy
+                rate_label = '達成率' if show_target else '前年比'
+                rows.append({'店舗名': sname, '実績': 実績, rate_label: rate_str, '_sort': sort_val})
+            df_all = pd.DataFrame(rows).sort_values('_sort', ascending=ascending).reset_index(drop=True)
+            df_top = df_all.head(10).copy()
+            df_top.insert(0, 'Rank', [str(i+1) for i in range(len(df_top))])
+            df_worst = df_all[df_all['_sort'] > 0].tail(10).iloc[::-1].copy() if not ascending else df_all.head(10).copy()
+            df_worst = df_all.sort_values('_sort', ascending=not ascending).head(10).copy()
+            df_worst.insert(0, 'Rank', [str(i+1) for i in range(len(df_worst))])
+            return df_top.drop(columns=['_sort']), df_worst.drop(columns=['_sort'])
+
+        def _render_rank_table(df, is_worst=False):
+            accent = '#e05c5c' if is_worst else '#58b5ca'
+            accent_dark = '#c94444' if is_worst else '#4aa8be'
+            th_style = (
+                f'background:{accent};color:#ffffff;font-weight:700;'
+                'padding:6px 10px;text-align:left;font-size:0.72rem;'
+                f'white-space:nowrap;border-bottom:2px solid {accent_dark};'
+            )
+            html_t = (
+                f'<div style="background:#ffffff;border-radius:14px;'
+                f'box-shadow:0 2px 12px rgba(0,0,0,0.08);'
+                f'overflow:hidden;border:1px solid {"#f5d8d8" if is_worst else "#d8eff5"};margin-bottom:8px;">'
+                '<table style="width:100%;border-collapse:collapse;font-size:0.74rem;">'
+            )
+            html_t += '<thead><tr>'
+            for col in df.columns:
+                w = 'width:32px;text-align:center;' if col=='Rank' else ('width:38%;' if col=='店舗名' else 'width:28%;')
+                html_t += f'<th style="{th_style}{w}">{col}</th>'
+            html_t += '</tr></thead><tbody>'
+            for ri, row in df.iterrows():
+                bg = ('#fff8f8' if is_worst else '#f5fbfd') if ri % 2 == 0 else '#ffffff'
+                html_t += f'<tr style="background:{bg};border-bottom:1px solid {"#fce8e8" if is_worst else "#eef6f9"};">'
+                for col in df.columns:
+                    val = str(row[col])
+                    if col == 'Rank':
+                        cell = f'<td style="padding:6px 8px;color:{accent};font-weight:800;font-size:1.0rem;text-align:center;">{val}</td>'
+                    elif col in ['達成率','前年比'] and '%' in val:
+                        try:
+                            v = float(val.replace('%','').replace(',',''))
+                            if is_worst:
+                                c = '#cc2200' if v < 80 else ('#d07000' if v < 100 else '#58b5ca')
+                            else:
+                                c = '#58b5ca' if v >= 100 else ('#d07000' if v >= 80 else '#cc2200')
+                            cell = f'<td style="padding:6px 10px;color:{c};font-weight:700;">{val}</td>'
+                        except:
+                            cell = f'<td style="padding:6px 10px;color:#595959;">{val}</td>'
+                    elif col == '店舗名':
+                        cell = f'<td style="padding:6px 8px;color:#1a3a5c;font-weight:700;font-size:0.80rem;">{val}</td>'
+                    else:
+                        cell = f'<td style="padding:6px 10px;color:#595959;">{val}</td>'
+                    html_t += cell
+                html_t += '</tr>'
+            html_t += '</tbody></table></div>'
+            return html_t
+
+        # ─── ランキング表示ヘルパー（タイトル＋テーブル＋データ操作） ───
+        def _show_rank_box(col_obj, title, df, is_worst):
+            label = '⚠️' if is_worst else '🏆'
+            kind  = 'ワースト10' if is_worst else 'トップ10'
+            with col_obj:
+                st.markdown(
+                    f'<div style="font-weight:700;font-size:0.82rem;margin-bottom:4px;">'
+                    f'{label} {title} {kind}</div>',
+                    unsafe_allow_html=True
+                )
+                st.markdown(_render_rank_table(df, is_worst=is_worst), unsafe_allow_html=True)
+                with st.expander('📥 データ操作', expanded=False):
+                    st.dataframe(df, use_container_width=True, hide_index=True)
+
+        # ─── ランキング結果をsession_stateにキャッシュ（データ変化時のみ再計算）───
+        if st.session_state.get('_rank_cache_key') != _rank_cache_key:
+            _rank_results = {}
+            for _rc_metric, _rc_show_tgt in [
+                ('受注金額(税抜)', True), ('受注金額(税抜)', False),
+                ('座数', True),          ('座数', False),
+                ('客数', False),         ('客単価', False),  ('品数', False),
+            ]:
+                _rank_results[(_rc_metric, _rc_show_tgt)] = _make_ranking(
+                    _rc_metric, show_target=_rc_show_tgt, ascending=False
+                )
+            st.session_state['_rank_results']   = _rank_results
+            st.session_state['_rank_cache_key'] = _rank_cache_key
+        else:
+            _rank_results = st.session_state.get('_rank_results', {})
+
+        # ─── 関連2指標を4列1行にまとめて表示（キャッシュ済みDFを使用）───
+        _rank_groups = [
+            [('🎯 受注目標達成率', '受注金額(税抜)', True),
+             ('📈 受注前年比',     '受注金額(税抜)', False)],
+            [('🪑 座数目標達成率', '座数', True),
+             ('📊 座数前年比',     '座数', False)],
+            [('👥 客数前年比',     '客数',   False),
+             ('💴 客単価前年比',   '客単価', False)],
+            [('📦 品数前年比',     '品数',   False),
+             None],
         ]
-
-    if not date_filter:
-        st.warning("選択期間のデータがCSVに含まれていません。")
-        st.stop()
-
-    period_ov_label = f"{date_filter[0]}（{sel_week_label}）" if sel_week_range else f"{date_filter[0]} 〜 {date_filter[-1]}"
-    st.caption(f"📅 集計期間: {date_filter[0]} 〜 {date_filter[-1]}　｜　対象店舗: {len(selected_stores)} 店")
-    st.divider()
-
-    # 絞り込み期間でlong形式変換
-    def to_long_filtered_cached(sales_bytes, store_names_t, label, master_json, dcols_t):
-        import io, json
-        sdf = load_csv_cached(sales_bytes)
-        mdf = pd.DataFrame(json.loads(master_json))
-        return to_long_filtered(sdf, list(store_names_t), label, mdf, list(dcols_t))
-
-    def to_long_filtered(sales_df, store_names, label, mdf, dcols):
-        sales_df = sales_df.copy()
-        sales_df["店舗ID_str"] = sales_df["店舗ID"].astype(str).str.strip()
-        rows = []
-        for _, sr in mdf[mdf["店舗名"].isin(store_names)].iterrows():
-            sname = sr["店舗名"]
-            scode = str(sr.get("店舗コード","")).strip()
-            # ① 店舗IDの整数値で突合（最優先）
-            try: sid_int_f = int(str(sr.get("店舗ID","")).strip())
-            except: sid_int_f = -1
-            if sid_int_f > 0:
-                sub_store = sales_df[sales_df["店舗ID"].apply(lambda x: int(str(x).strip()) if str(x).strip().isdigit() else -1) == sid_int_f]
-            else:
-                sub_store = pd.DataFrame()
-            # ② コードで突合（複数IDある場合は数値最大を選択）
-            if sub_store.empty:
-                sub_store = sales_df[sales_df["店舗コード"].astype(str).str.strip() == scode]
-                if not sub_store.empty:
-                    id_ints = sales_df["店舗ID"].apply(lambda x: int(str(x).strip()) if str(x).strip().isdigit() else -1)
-                    if sub_store.index.map(lambda i: id_ints[i]).nunique() > 1:
-                        max_int = sub_store.index.map(lambda i: id_ints[i]).max()
-                        sub_store = sub_store[sub_store.index.map(lambda i: id_ints[i]) == max_int]
-            # ③ フォールバック：店舗名
-            if sub_store.empty:
-                sub_store = sales_df[sales_df["店舗名"] == sname]
-                sub_store = sales_df[sales_df["店舗名"] == sname]
-            for metric in KEY_METRICS:
-                sub = sub_store[sub_store["項目名"] == metric]
-                if sub.empty:
+        _hr = '<hr style="border:none;border-top:1px solid #eee;margin:8px 0 20px;">'
+        for group in _rank_groups:
+            c1, c2, c3, c4 = st.columns(4)
+            cols_pair = [c1, c2, c3, c4]
+            ci = 0
+            for cfg in group:
+                if cfg is None:
+                    ci += 2
                     continue
-                for dc in dcols:
-                    if dc not in sub.columns:
-                        continue
-                    val = to_numeric_safe(sub[dc]).values[0]
-                    parts = str(dc).split("/")
-                    month_day = f"{int(parts[1]):02d}/{int(parts[2]):02d}" if len(parts)==3 else dc
-                    rows.append({
-                        "店舗名": sname, "店舗コード": scode,
-                        "代行会社": sr["代行会社"], "エリア": sr["エリア"],
-                        "月日": month_day, "年度": label, "指標": metric, "値": val,
-                    })
-        return pd.DataFrame(rows)
+                title, metric, show_tgt = cfg
+                df_top, df_worst = _rank_results.get((metric, show_tgt), (pd.DataFrame(), pd.DataFrame()))
+                _show_rank_box(cols_pair[ci],     title, df_top,   is_worst=False)
+                _show_rank_box(cols_pair[ci + 1], title, df_worst, is_worst=True)
+                ci += 2
+            st.markdown(_hr, unsafe_allow_html=True)
 
-    import json as _json
-    _master_json = _json.dumps(master_df.to_dict("records"), ensure_ascii=False)
-    uploaded_now.seek(0)
-    _now_bytes = uploaded_now.read()
-    uploaded_now.seek(0)
-    ov_long_now  = to_long_filtered_cached(_now_bytes, tuple(selected_stores), "今年", _master_json, tuple(date_filter))
-    ov_long_prev = pd.DataFrame()
-    if ov_has_prev:
-        prev_date_cols = get_date_cols(ov_sales_prev)
+    if st.session_state.get('current_page', 'top') == 'summary':
+    
+        st.markdown("### 📅 集計期間を選択")
+        fc1, fc2, fc3 = st.columns([1, 1, 2])
+    
+        with fc1:
+            sel_year = st.selectbox("年", csv_years, index=0, key="ov_year")
+    
+        with fc2:
+            month_nums = sorted(set(d.month for d in all_dates_dt if d.year == sel_year), reverse=True)
+            sel_month_label = st.selectbox("月", [f"{m}月" for m in month_nums], index=0, key="ov_month")
+            sel_month_num   = int(sel_month_label.replace("月", ""))
+    
+        with fc3:
+            # 月の1日から始まり、日曜で区切る週を生成
+            week_options = ["月間累計"]
+            week_date_ranges = [None]
+            dow_jp = ["月","火","水","木","金","土","日"]
+            _first = datetime.date(sel_year, sel_month_num, 1)
+            _last_day = cal_mod.monthrange(sel_year, sel_month_num)[1]
+            _last = datetime.date(sel_year, sel_month_num, _last_day)
+            _cur = _first
+            _wi = 1
+            while _cur <= _last:
+                _days_to_sun = (6 - _cur.weekday()) % 7
+                _week_end = min(_cur + datetime.timedelta(days=_days_to_sun), _last)
+                _s_dow = dow_jp[_cur.weekday()]
+                _e_dow = dow_jp[_week_end.weekday()]
+                _label = f"W{_wi}\u30004/{_cur.day}({_s_dow})\uff5e{sel_month_num}/{_week_end.day}({_e_dow})"
+                _label = f"W{_wi}　{sel_month_num}/{_cur.day}({_s_dow})〜{sel_month_num}/{_week_end.day}({_e_dow})"
+                week_options.append(_label)
+                week_date_ranges.append((_cur, _week_end))
+                _cur = _week_end + datetime.timedelta(days=1)
+                _wi += 1
+            sel_week_label = st.selectbox("週", week_options, index=0, key="ov_week")
+            sel_week_idx   = week_options.index(sel_week_label)
+            sel_week_range = week_date_ranges[sel_week_idx]
+    
+        # 期間に合わせて日付列を絞り込み
         if sel_week_range is None:
-            prev_filter = [
-                d for d in prev_date_cols
-                if pd.to_datetime(d).month == sel_month_num
+            date_filter = [
+                d for d in date_cols_all
+                if pd.to_datetime(d).year == sel_year and pd.to_datetime(d).month == sel_month_num
             ]
         else:
             s_dt, e_dt = sel_week_range
-            prev_filter = [
-                d for d in prev_date_cols
-                if pd.to_datetime(d).month == s_dt.month
-                and s_dt.day <= pd.to_datetime(d).day <= e_dt.day
+            date_filter = [
+                d for d in date_cols_all
+                if s_dt <= pd.to_datetime(d).date() <= e_dt
             ]
-        if prev_filter:
-            uploaded_prev.seek(0)
-            _prev_bytes = uploaded_prev.read()
-            uploaded_prev.seek(0)
-            ov_long_prev = to_long_filtered_cached(_prev_bytes, tuple(selected_stores), "前年", _master_json, tuple(prev_filter))
+    
+        if not date_filter:
+            st.warning("選択期間のデータがCSVに含まれていません。")
+            st.stop()
+    
+        period_ov_label = f"{date_filter[0]}（{sel_week_label}）" if sel_week_range else f"{date_filter[0]} 〜 {date_filter[-1]}"
+        st.caption(f"📅 集計期間: {date_filter[0]} 〜 {date_filter[-1]}　｜　対象店舗: {len(selected_stores)} 店")
+        st.divider()
+    
+        # 絞り込み期間でlong形式変換
+        @st.cache_data(show_spinner=False)
+        def to_long_filtered_cached(sales_bytes, store_names_t, label, master_json, dcols_t):
+            import io, json
+            sdf = load_csv_cached(sales_bytes)
+            mdf = pd.DataFrame(json.loads(master_json))
+            return to_long_filtered(sdf, list(store_names_t), label, mdf, list(dcols_t))
+    
+        def to_long_filtered(sales_df, store_names, label, mdf, dcols):
+            sales_df = sales_df.copy()
+            sales_df["店舗ID_str"] = sales_df["店舗ID"].astype(str).str.strip()
+            rows = []
+            for _, sr in mdf[mdf["店舗名"].isin(store_names)].iterrows():
+                sname = sr["店舗名"]
+                scode = str(sr.get("店舗コード","")).strip()
+                # ① 店舗IDの整数値で突合（最優先）
+                try: sid_int_f = int(str(sr.get("店舗ID","")).strip())
+                except: sid_int_f = -1
+                if sid_int_f > 0:
+                    sub_store = sales_df[sales_df["店舗ID"].apply(lambda x: int(str(x).strip()) if str(x).strip().isdigit() else -1) == sid_int_f]
+                else:
+                    sub_store = pd.DataFrame()
+                # ② コードで突合（複数IDある場合は数値最大を選択）
+                if sub_store.empty:
+                    sub_store = sales_df[sales_df["店舗コード"].astype(str).str.strip() == scode]
+                    if not sub_store.empty:
+                        id_ints = sales_df["店舗ID"].apply(lambda x: int(str(x).strip()) if str(x).strip().isdigit() else -1)
+                        if sub_store.index.map(lambda i: id_ints[i]).nunique() > 1:
+                            max_int = sub_store.index.map(lambda i: id_ints[i]).max()
+                            sub_store = sub_store[sub_store.index.map(lambda i: id_ints[i]) == max_int]
+                # ③ フォールバック：店舗名
+                if sub_store.empty:
+                    sub_store = sales_df[sales_df["店舗名"] == sname]
+                    sub_store = sales_df[sales_df["店舗名"] == sname]
+                for metric in KEY_METRICS:
+                    sub = sub_store[sub_store["項目名"] == metric]
+                    if sub.empty:
+                        continue
+                    for dc in dcols:
+                        if dc not in sub.columns:
+                            continue
+                        val = to_numeric_safe(sub[dc]).values[0]
+                        parts = str(dc).split("/")
+                        month_day = f"{int(parts[1]):02d}/{int(parts[2]):02d}" if len(parts)==3 else dc
+                        rows.append({
+                            "店舗名": sname, "店舗コード": scode,
+                            "代行会社": sr["代行会社"], "エリア": sr["エリア"],
+                            "月日": month_day, "年度": label, "指標": metric, "値": val,
+                        })
+            return pd.DataFrame(rows)
+    
+        # キャッシュ済みlong_dfを使用（高速）
+        _long_now_full = _long_now_cached
+        # 期間フィルタ（月日で絞り込むだけ）
+        filter_month_days = set()
+        for d in date_filter:
+            parts = str(d).split("/")
+            if len(parts)==3:
+                filter_month_days.add(f"{int(parts[1]):02d}/{int(parts[2]):02d}")
+        ov_long_now = _long_now_full[_long_now_full["月日"].isin(filter_month_days)] if filter_month_days else _long_now_full
+    
+        ov_long_prev = pd.DataFrame()
+        if ov_has_prev and not _long_prev_cached.empty:
+            if sel_week_range is None:
+                # 月間累計 → 日合わせ（前年同月の同日付）
+                prev_month_days = {
+                    md for md in _long_prev_cached['月日'].unique()
+                    if int(md.split('/')[0]) == sel_month_num
+                }
+                ov_long_prev = _long_prev_cached[_long_prev_cached["月日"].isin(prev_month_days)]
+            else:
+                # 週選択 → 前年同曜日週を逆引き方式で取得（月またぎ対応）
+                import datetime as _dt_ov
+                s_dt, e_dt = sel_week_range
+                _ov_now_first  = _dt_ov.date(sel_year,      s_dt.month, 1)
+                _ov_prev_first = _dt_ov.date(sel_year - 1,  s_dt.month, 1)
+                _ov_dow_diff   = _ov_now_first.weekday() - _ov_prev_first.weekday()
+                # 今年の週範囲の月日セット
+                _ov_now_days = set()
+                _cur = s_dt
+                while _cur <= e_dt:
+                    _ov_now_days.add(f"{_cur.month:02d}/{_cur.day:02d}")
+                    _cur += _dt_ov.timedelta(days=1)
+                # 前年CSVの全月日から逆引き → 今年の週範囲に対応する前年月日を取得
+                _ov_prev_all = list(_long_prev_cached["月日"].unique()) if not _long_prev_cached.empty else []
+                _ov_reverse_map = get_yoy_prev_days_from_prev(_ov_prev_all, mode="dow",
+                                                               now_year=sel_year, prev_year=sel_year-1)
+                _ov_prev_days = {prev_md for now_md, prev_md in _ov_reverse_map.items() if now_md in _ov_now_days}
+                ov_long_prev = _long_prev_cached[_long_prev_cached["月日"].isin(_ov_prev_days)] if _ov_prev_days else pd.DataFrame()
+    
+        # 目標：期間内の日別目標を合計
+        # 目標DataFrameをキャッシュ（get_store_target_period内で毎回CSV読むのを防ぐ）
+        import io as _io_tgt2
+        # マスタの 店舗ID → 店舗名 マッピング
+        _id_to_name_ov = {
+            str(r.get('店舗ID','')).strip(): str(r.get('店舗名','')).strip()
+            for _, r in master_df.iterrows()
+            if str(r.get('店舗ID','')).strip() and str(r.get('店舗ID','')).strip() != 'nan'
+        }
 
-    # 目標：期間内の日別目標を合計
-    def get_store_target_period(sname, metric):
-        """選択期間内の目標合計を返す（目標CSVから）"""
-        if not uploaded_target_sales and not uploaded_target_zasu:
-            return None
-        tfile = uploaded_target_sales if metric == "受注金額(税抜)" else (uploaded_target_zasu if metric == "座数" else None)
-        if tfile is None:
-            return None
-        try:
-            tfile.seek(0)
-            import io
-            tdf = pd.read_csv(io.BytesIO(tfile.read()), encoding="utf-8", header=None)
+        @st.cache_data(show_spinner=False)
+        def _parse_target_bytes(b, metric_name):
+            if b is None: return pd.DataFrame()
+            tdf = pd.read_csv(_io_tgt2.BytesIO(b), encoding="utf-8", header=None)
+            if tdf.shape[1] <= 12: return pd.DataFrame()
+            # E列=4(店舗名), F列=5(日付), M列=12(目標値)
             tdf = tdf[[4, 5, 12]].copy()
             tdf.columns = ["店舗名", "日付", "目標値"]
             tdf = tdf.dropna(subset=["店舗名","日付","目標値"])
-            tdf = tdf[~tdf["店舗名"].astype(str).isin(["受注目標","座数目標","スマレジ店舗ID","nan"])]
+            tdf["店舗名"] = tdf["店舗名"].astype(str).str.strip()
+            exclude = ["受注目標","座数目標","スマレジ店舗ID","nan","NaN","店舗名"]
+            tdf = tdf[~tdf["店舗名"].isin(exclude) & (tdf["店舗名"].str.len() > 1)]
             tdf["目標値"] = pd.to_numeric(tdf["目標値"].astype(str).str.replace(",",""), errors="coerce")
+            tdf = tdf[tdf["目標値"] > 0]
+            master_stores = set(master_df['店舗名'].dropna().astype(str).str.strip())
+            tdf = tdf[tdf["店舗名"].isin(master_stores)]
+            tdf = tdf.dropna(subset=["店舗名","目標値"])
             tdf["日付_dt"] = pd.to_datetime(tdf["日付"], errors="coerce")
-            tdf = tdf.dropna(subset=["日付_dt","目標値"])
-            tdf = tdf[tdf["店舗名"] == sname]
+            tdf["指標"] = metric_name
+            return tdf.dropna(subset=["日付_dt","目標値"])
+        _tdf_sales = _parse_target_bytes(_tsales_bytes, "受注金額(税抜)")
+        _tdf_zasu  = _parse_target_bytes(_tzasu_bytes,  "座数")
+
+        # get_store_target_period：インデックスから高速取得
+        import datetime as _dt_tgt
+        _tidx2 = st.session_state.get('_target_index', {})
+
+        def get_store_target_period(sname, metric):
+            """選択期間内の目標合計を返す（インデックス高速版）"""
+            if metric not in ['受注金額(税抜)', '座数']:
+                return None
+            total = 0.0
+            found = False
             if sel_week_range is None:
-                tdf = tdf[(tdf["日付_dt"].dt.year==sel_year)&(tdf["日付_dt"].dt.month==sel_month_num)]
+                # 月間：同年・同月のキーから全日取得
+                key = (sname, metric, sel_year, sel_month_num)
+                for d, v in _tidx2.get(key, []):
+                    total += v
+                    found = True
             else:
                 s_dt, e_dt = sel_week_range
-                tdf = tdf[(tdf["日付_dt"].dt.date >= s_dt)&(tdf["日付_dt"].dt.date <= e_dt)]
-            total = tdf["目標値"].sum()
-            return float(total) if total > 0 else None
-        except:
-            return None
-
-    # ── テーブルCSS ──
-    st.markdown("""
-    <style>
-    .ov-wrap { max-height:92vh; overflow-y:auto; border-radius:10px; border:1px solid #c8e8e8; }
-    .ov-table { width:100%; border-collapse:collapse; font-size:0.68rem; font-family:'M PLUS 1p',sans-serif; }
-    .ov-table thead tr:nth-child(1) th { position:sticky; top:0; z-index:10; }
-    .ov-table thead tr:nth-child(2) th { position:sticky; top:29px; z-index:10; }
-    .ov-th-group { background:#3a8a8a; color:#ffffff; text-align:center; padding:4px; font-size:0.68rem; font-weight:800; }
-    .ov-th { background:#5aacac; color:#ffffff; text-align:center; padding:3px 4px; white-space:nowrap; font-size:0.63rem; font-weight:700; }
-    .ov-th-group-sep { border-left:3px double #1a5a5a !important; }
-    .ov-th-sep { border-left:3px double #1a5a5a !important; }
-    .ov-td-sep { border-left:3px double #88cccc !important; }
-    .ov-td { border:1px solid #ddeaea; padding:3px 5px; text-align:right; white-space:nowrap; }
-    .ov-td-name { text-align:left; font-weight:700; background:#f5fafa; padding:3px 7px; white-space:nowrap; border:1px solid #d0e8e8; }
-    .ov-tr-even td { background:#f8fdfd; }
-    .ov-tr-odd  td { background:#ffffff; }
-    .ov-pos  { color:#1a8a50; font-weight:700; }
-    .ov-neg  { color:#cc2200; font-weight:700; }
-    .ov-ach-hi  { color:#1a8a50; font-weight:700; }
-    .ov-ach-mid { color:#d07000; font-weight:700; }
-    .ov-ach-lo  { color:#cc2200; font-weight:700; }
-    .ov-gap-neg { color:#cc2200; }
-    .ov-gap-pos { color:#1a8a50; }
-    .ov-total td { background:#d6f0f0 !important; font-weight:700; }
-    .ov-agency td { background:#eef8f8 !important; font-size:0.63rem; color:#2a6060; font-weight:700;
-    </style>
-    """, unsafe_allow_html=True)
-
-    OVERVIEW_METRICS = [
-        ("受注金額(税抜)", "受注金額", "円",  False),
-        ("座数",           "座数",    "",    False),
-        ("客数",           "客数",    "人",   False),
-        ("CVR",            "CVR",    "%",    True),
-        ("客単価",         "客単価",  "円",   True),
-        ("品数",           "品数",    "",    False),
-    ]
-
-    def fmt_v(v, unit):
-        if v is None or (isinstance(v, float) and pd.isna(v)): return "—"
-        try:
-            fv = float(v)
-            if unit == "%":   return f"{fv:.1f}%"
-            elif unit == "円": return f"{fv:,.0f}"
-            else:              return f"{fv:,.0f}"
-        except: return "—"
-
-    def ach_span(ach):
-        if ach is None: return "—"
-        cls = "ov-ach-hi" if ach>=100 else ("ov-ach-mid" if ach>=80 else "ov-ach-lo")
-        return f'<span class="{cls}">{ach:.1f}%</span>'
-
-    def yoy_span(yoy):
-        if yoy is None: return "—"
-        cls = "ov-pos" if yoy>=100 else "ov-neg"
-        return f'<span class="{cls}">{yoy:.1f}%</span>'
-
-    def calc_vals(store_list):
-        res = {}
-        for mi3, (metric, _, unit, is_avg) in enumerate(OVERVIEW_METRICS):
-            sub_n = ov_long_now[(ov_long_now["指標"]==metric)&(ov_long_now["店舗名"].isin(store_list))]["値"]
-            vn = sub_n.mean() if is_avg else sub_n.sum()
-            vp = None
-            if not ov_long_prev.empty:
-                sub_p = ov_long_prev[(ov_long_prev["指標"]==metric)&(ov_long_prev["店舗名"].isin(store_list))]["値"]
-                vp = sub_p.mean() if is_avg else sub_p.sum()
-            tgt = None
-            if metric in ["受注金額(税抜)","座数"]:
-                t = sum([get_store_target_period(s, metric) or 0 for s in store_list])
-                tgt = t if t > 0 else None
-            res[metric] = (vn, vp, tgt)
-        return res
-
-    def make_row_html(label, store_list, row_cls=""):
-        vals = calc_vals(store_list)
-        html = f'<tr class="{row_cls}"><td class="ov-td-name">{label}</td>'
-        for mi3, (metric, _, unit, is_avg) in enumerate(OVERVIEW_METRICS):
-            vn, vp, tgt = vals[metric]
-            is_tm = metric in ["受注金額(税抜)","座数"] and has_target
-            sep_d = ' ov-td-sep' if mi3 > 0 else ''
-            if is_tm:
-                html += f'<td class="ov-td{sep_d}">{fmt_v(tgt, unit) if tgt else "—"}</td>'
-                html += f'<td class="ov-td">{fmt_v(vn, unit)}</td>'
-                if tgt and tgt > 0 and not pd.isna(vn):
-                    gap = vn - tgt
-                    gcls = "ov-gap-pos" if gap >= 0 else "ov-gap-neg"
-                    gstr = f"{gap:+,.0f}" if unit != "%" else f"{gap:+.1f}"
-                    html += f'<td class="ov-td"><span class="{gcls}">{gstr}</span></td>'
+                # 週選択：開始〜終了月を跨ぐ場合も考慮
+                months = set()
+                cur = s_dt
+                while cur <= e_dt:
+                    months.add((cur.year, cur.month))
+                    cur = (cur.replace(day=28) + _dt_tgt.timedelta(days=4)).replace(day=1)
+                for (y, m) in months:
+                    key = (sname, metric, y, m)
+                    for d, v in _tidx2.get(key, []):
+                        if s_dt <= d <= e_dt:
+                            total += v
+                            found = True
+            return float(total) if found and total > 0 else None
+    
+        # ── テーブルCSS ──
+        st.markdown("""
+        <style>
+        .ov-wrap { max-height:92vh; overflow-y:auto; border-radius:10px; border:1px solid #c8e8e8; }
+        .ov-table { width:100%; border-collapse:collapse; font-size:0.68rem; font-family:'M PLUS 1p',sans-serif; }
+        .ov-table thead tr:nth-child(1) th { position:sticky; top:0; z-index:10; }
+        .ov-table thead tr:nth-child(2) th { position:sticky; top:29px; z-index:10; }
+        .ov-th-group { background:#58b5ca; color:#ffffff; text-align:center; padding:4px; font-size:0.68rem; font-weight:800; }
+        .ov-th { background:#acd7e1; color:#ffffff; text-align:center; padding:3px 4px; white-space:nowrap; font-size:0.63rem; font-weight:700; }
+        .ov-th:first-child { background:#58b5ca !important; }
+        .ov-th-group-sep { border-left:3px double #58b5ca !important; }
+        .ov-th-sep { border-left:3px double #58b5ca !important; }
+        .ov-td-sep { border-left:3px double rgba(88,181,202,0.4) !important; }
+        .ov-td { border:1px solid #ddeaea; padding:3px 5px; text-align:right; white-space:nowrap; }
+        .ov-td-name { text-align:left; font-weight:700; color:#595959 !important; padding:3px 7px; white-space:nowrap; border:1px solid #ddeaea; min-width:120px; }
+        .ov-tr-even td { background:#f8fdfd; }
+        .ov-tr-odd  td { background:#ffffff; }
+        .ov-pos  { color:#58b5ca; font-weight:700; }
+        .ov-neg  { color:#cc2200; font-weight:700; }
+        .ov-ach-hi  { color:#58b5ca; font-weight:700; }
+        .ov-ach-mid { color:#d07000; font-weight:700; }
+        .ov-ach-lo  { color:#cc2200; font-weight:700; }
+        .ov-gap-neg { color:#cc2200; }
+        .ov-gap-pos { color:#58b5ca; font-weight:700; }
+        .ov-total td { background:rgba(88,181,202,0.12) !important; font-weight:700; color:#1a1a1a !important; }
+        .ov-agency td { background:#eef8f8 !important; font-size:0.63rem; color:#2a6060; font-weight:700; }
+        .ov-agency-total td { background:#d6f0f0 !important; font-size:0.74rem; color:#1a5050; font-weight:800; border-top:2px solid #a0d8d8 !important; border-bottom:1px solid #a0d8d8 !important; }
+        </style>
+        """, unsafe_allow_html=True)
+    
+        OVERVIEW_METRICS = [
+            ("受注金額(税抜)", "受注金額", "円",  False),
+            ("座数",           "座数",    "",    False),
+            ("客数",           "客数",    "人",   False),
+            ("CVR",            "CVR",    "%",    True),
+            ("客単価",         "客単価",  "円",   True),
+            ("品数",           "品数",    "",    False),
+        ]
+    
+        def fmt_v(v, unit):
+            if v is None or (isinstance(v, float) and pd.isna(v)): return "—"
+            try:
+                fv = float(v)
+                if unit == "%":   return f"{fv:.1f}%"
+                elif unit == "円": return f"{fv:,.0f}"
+                else:              return f"{fv:,.0f}"
+            except: return "—"
+    
+        def ach_span(ach):
+            if ach is None: return "—"
+            cls = "ov-ach-hi" if ach>=100 else ("ov-ach-mid" if ach>=80 else "ov-ach-lo")
+            return f'<span class="{cls}">{ach:.1f}%</span>'
+    
+        def yoy_span(yoy):
+            if yoy is None: return "—"
+            cls = "ov-pos" if yoy>=100 else "ov-neg"
+            return f'<span class="{cls}">{yoy:.1f}%</span>'
+    
+        def calc_vals(store_list):
+            res = {}
+            for mi3, (metric, _, unit, is_avg) in enumerate(OVERVIEW_METRICS):
+                sub_n = ov_long_now[(ov_long_now["指標"]==metric)&(ov_long_now["店舗名"].isin(store_list))]["値"]
+                vn = sub_n.mean() if is_avg else sub_n.sum()
+                vp = None
+                if not ov_long_prev.empty:
+                    sub_p = ov_long_prev[(ov_long_prev["指標"]==metric)&(ov_long_prev["店舗名"].isin(store_list))]["値"]
+                    vp = sub_p.mean() if is_avg else sub_p.sum()
+                tgt = None
+                if metric in ["受注金額(税抜)","座数"]:
+                    t = sum([get_store_target_period(s, metric) or 0 for s in store_list])
+                    tgt = t if t > 0 else None
+                res[metric] = (vn, vp, tgt)
+            return res
+    
+        def make_row_html(label, store_list, row_cls=""):
+            vals = calc_vals(store_list)
+            td_bg = 'background:#f8fdfd;' if 'even' in row_cls else ('background:#ffffff;' if 'odd' in row_cls else ('background:#d6f0f0;' if 'total' in row_cls else ''))
+            # リスト結合方式（文字列 += より高速）
+            parts = [f'<tr class="{row_cls}"><td class="ov-td-name" style="{td_bg}">{label}</td>']
+            for mi3, (metric, _, unit, is_avg) in enumerate(OVERVIEW_METRICS):
+                vn, vp, tgt = vals[metric]
+                is_tm = metric in ["受注金額(税抜)","座数"] and has_target
+                sep_d = ' ov-td-sep' if mi3 > 0 else ''
+                if is_tm:
+                    parts.append(f'<td class="ov-td{sep_d}">{fmt_v(tgt, unit) if tgt else "—"}</td>')
+                    parts.append(f'<td class="ov-td">{fmt_v(vn, unit)}</td>')
+                    if tgt and tgt > 0 and not pd.isna(vn):
+                        gap = vn - tgt
+                        gcls = "ov-gap-pos" if gap >= 0 else "ov-gap-neg"
+                        gstr = f"{gap:+,.0f}" if unit != "%" else f"{gap:+.1f}"
+                        parts.append(f'<td class="ov-td"><span class="{gcls}">{gstr}</span></td>')
+                    else:
+                        parts.append('<td class="ov-td">—</td>')
+                    ach = (vn/tgt*100) if tgt and tgt>0 and not pd.isna(vn) else None
+                    parts.append(f'<td class="ov-td">{ach_span(ach)}</td>')
                 else:
-                    html += '<td class="ov-td">—</td>'
-                ach = (vn/tgt*100) if tgt and tgt>0 and not pd.isna(vn) else None
-                html += f'<td class="ov-td">{ach_span(ach)}</td>'
+                    parts.append(f'<td class="ov-td{sep_d}">{fmt_v(vn, unit)}</td>')
+                if ov_has_prev and not ov_long_prev.empty:
+                    parts.append(f'<td class="ov-td">{fmt_v(vp, unit)}</td>')
+                    yoy = (vn/abs(vp)*100) if vp and not pd.isna(vp) and vp!=0 and not pd.isna(vn) else None
+                    parts.append(f'<td class="ov-td">{yoy_span(yoy)}</td>')
+            parts.append('</tr>')
+            return ''.join(parts)
+    
+        # ── ヘッダー ──
+        has_target = uploaded_target_sales or uploaded_target_zasu
+        html_parts = ['<table class="ov-table"><thead><tr><th class="ov-th" rowspan="2" style="min-width:110px">店舗名</th>']
+        for mig, (metric, label, unit, _) in enumerate(OVERVIEW_METRICS):
+            is_tm = metric in ["受注金額(税抜)","座数"] and has_target
+            has_yoy = ov_has_prev and not ov_long_prev.empty
+            span = (4 if is_tm else 1) + (2 if has_yoy else 0)
+            sep_g = ' ov-th-group-sep' if mig > 0 else ''
+            html_parts.append(f'<th class="ov-th-group{sep_g}" colspan="{span}">{label}</th>')
+        html_parts.append('</tr><tr>')
+        for mi2, (metric, label, unit, _) in enumerate(OVERVIEW_METRICS):
+            is_tm = metric in ["受注金額(税抜)","座数"] and has_target
+            has_yoy = ov_has_prev and not ov_long_prev.empty
+            sep_h = ' ov-th-sep' if mi2 > 0 else ''
+            if is_tm:
+                html_parts.append(f'<th class="ov-th{sep_h}">目標</th><th class="ov-th">実績</th><th class="ov-th">Gap</th><th class="ov-th">目標比</th>')
             else:
-                html += f'<td class="ov-td{sep_d}">{fmt_v(vn, unit)}</td>'
-            if ov_has_prev and not ov_long_prev.empty:
-                html += f'<td class="ov-td">{fmt_v(vp, unit)}</td>'
-                yoy = (vn/vp*100) if vp and not pd.isna(vp) and vp!=0 and not pd.isna(vn) else None
-                html += f'<td class="ov-td">{yoy_span(yoy)}</td>'
-        html += '</tr>'
-        return html
+                html_parts.append(f'<th class="ov-th{sep_h}">実績</th>')
+            if has_yoy:
+                html_parts.append('<th class="ov-th">前年</th><th class="ov-th">前年比</th>')
+        html_parts.append('</tr></thead><tbody>')
+    
+        # エリア合計
+        # 代行会社で絞り込み中はエリアトータルを非表示（代行会社行と同じ数字になるため）
+        if selected_agency == 'すべて':
+            html_parts.append(make_row_html("🔢 エリアトータル", selected_stores, "ov-total"))
+    
+        # 代行会社ごと（空・NaNの代行会社・店舗名は除外）
+        agencies_sel = [
+            a for a in master_df[master_df["店舗名"].isin(selected_stores)]["代行会社"].unique()
+            if a and str(a).strip() and str(a) != 'nan'
+        ]
+        for ai, agency in enumerate(sorted(agencies_sel)):
+            ag_stores = [
+                s for s in master_df[
+                    (master_df["代行会社"]==agency)&(master_df["店舗名"].isin(selected_stores))
+                ]["店舗名"].tolist()
+                if s and str(s).strip() and str(s) != 'nan'
+            ]
+            if not ag_stores:
+                continue
+            html_parts.append(make_row_html(f"🏢 {agency}", ag_stores, "ov-agency-total"))
+            for si, sname in enumerate(ag_stores):
+                row_cls = "ov-tr-even" if si%2==0 else "ov-tr-odd"
+                html_parts.append(make_row_html(sname, [sname], row_cls))
+    
+        html_parts.append('</tbody></table>')
+        html = ''.join(html_parts)
+        st.markdown('<div class="ov-wrap">' + html + '</div>', unsafe_allow_html=True)
 
-    # ── ヘッダー ──
-    has_target = uploaded_target_sales or uploaded_target_zasu
-    html = '<table class="ov-table"><thead><tr><th class="ov-th" rowspan="2" style="min-width:110px">店舗名</th>'
-    for mig, (metric, label, unit, _) in enumerate(OVERVIEW_METRICS):
-        is_tm = metric in ["受注金額(税抜)","座数"] and has_target
-        has_yoy = ov_has_prev and not ov_long_prev.empty
-        span = (4 if is_tm else 1) + (2 if has_yoy else 0)
-        sep_g = ' ov-th-group-sep' if mig > 0 else ''
-        html += f'<th class="ov-th-group{sep_g}" colspan="{span}">{label}</th>'
-    html += '</tr><tr>'
-    for mi2, (metric, label, unit, _) in enumerate(OVERVIEW_METRICS):
-        is_tm = metric in ["受注金額(税抜)","座数"] and has_target
-        has_yoy = ov_has_prev and not ov_long_prev.empty
-        sep_h = ' ov-th-sep' if mi2 > 0 else ''
-        if is_tm:
-            html += f'<th class="ov-th{sep_h}">目標</th><th class="ov-th">実績</th><th class="ov-th">Gap</th><th class="ov-th">目標比</th>'
-        else:
-            html += f'<th class="ov-th{sep_h}">実績</th>'
-        if has_yoy:
-            html += '<th class="ov-th">前年</th><th class="ov-th">前年比</th>'
-    html += '</tr></thead><tbody>'
+        # ── CSVダウンロードボタン ──
+        import io as _io_csv
+        _csv_rows = []
+        # ヘッダー行1（指標グループ）
+        _hdr1 = ['店舗名']
+        _hdr2 = ['']
+        for metric, label, unit, _ in OVERVIEW_METRICS:
+            is_tm = metric in ['受注金額(税抜)', '座数'] and has_target
+            has_yoy = ov_has_prev and not ov_long_prev.empty
+            if is_tm:
+                _hdr1 += [label, '', '', '']
+                _hdr2 += ['目標', '実績', 'Gap', '目標比(%)']
+            else:
+                _hdr1 += [label]
+                _hdr2 += ['実績']
+            if has_yoy:
+                _hdr1 += ['', '']
+                _hdr2 += ['前年', '前年比(%)']
+        _csv_rows.append(_hdr1)
+        _csv_rows.append(_hdr2)
 
-    # エリア合計
-    html += make_row_html("🔢 トータル", selected_stores, "ov-total")
+        # データ行生成関数
+        def _make_csv_row(store_label, store_list):
+            row = [store_label]
+            for metric, label, unit, _ in OVERVIEW_METRICS:
+                is_tm = metric in ['受注金額(税抜)', '座数'] and has_target
+                has_yoy = ov_has_prev and not ov_long_prev.empty
+                sub_now  = ov_long_now[ov_long_now['指標']==metric]
+                sub_prev = ov_long_prev[ov_long_prev['指標']==metric] if (ov_has_prev and not ov_long_prev.empty) else pd.DataFrame()
+                sub_now  = sub_now[sub_now['店舗名'].isin(store_list)]
+                sub_prev = sub_prev[sub_prev['店舗名'].isin(store_list)] if not sub_prev.empty else sub_prev
+                vn = sub_now['値'].mean() if metric in AVG_METRICS else sub_now['値'].sum()
+                vp = sub_prev['値'].mean() if (not sub_prev.empty and metric in AVG_METRICS) else (sub_prev['値'].sum() if not sub_prev.empty else None)
+                if is_tm:
+                    tgt = get_store_target_period(store_list[0] if len(store_list)==1 else None, metric) if len(store_list)==1 else sum([get_store_target_period(s, metric) or 0 for s in store_list]) or None
+                    gap = (vn - tgt) if (tgt and not pd.isna(vn)) else None
+                    ach = (vn / tgt * 100) if (tgt and tgt > 0 and not pd.isna(vn)) else None
+                    row += [
+                        round(tgt) if tgt else '',
+                        round(vn) if not pd.isna(vn) else '',
+                        round(gap) if gap is not None else '',
+                        f'{ach:.1f}' if ach is not None else '',
+                    ]
+                else:
+                    row += [round(vn, 2) if not pd.isna(vn) else '']
+                if has_yoy:
+                    yoy = (vn / abs(vp) * 100) if (vp and not pd.isna(vp) and vp != 0 and not pd.isna(vn)) else None
+                    row += [
+                        round(vp, 2) if (vp is not None and not pd.isna(vp)) else '',
+                        f'{yoy:.1f}' if yoy is not None else '',
+                    ]
+            return row
 
-    # 代行会社ごと
-    agencies_sel = master_df[master_df["店舗名"].isin(selected_stores)]["代行会社"].unique()
-    for ai, agency in enumerate(sorted(agencies_sel)):
-        ag_stores = master_df[
-            (master_df["代行会社"]==agency)&(master_df["店舗名"].isin(selected_stores))
-        ]["店舗名"].tolist()
-        html += f'<tr class="ov-agency"><td colspan="99" style="padding:3px 8px;">🏢 {agency}</td></tr>'
-        for si, sname in enumerate(ag_stores):
-            row_cls = "ov-tr-even" if si%2==0 else "ov-tr-odd"
-            html += make_row_html(sname, [sname], row_cls)
+        # エリアトータル行
+        _csv_rows.append(_make_csv_row('エリアトータル', selected_stores))
+        # 代行会社・店舗別（空・NaN除外）
+        for agency in sorted([
+            a for a in master_df[master_df['店舗名'].isin(selected_stores)]['代行会社'].unique()
+            if a and str(a).strip() and str(a) != 'nan'
+        ]):
+            ag_stores = [
+                s for s in master_df[(master_df['代行会社']==agency)&(master_df['店舗名'].isin(selected_stores))]['店舗名'].tolist()
+                if s and str(s).strip() and str(s) != 'nan'
+            ]
+            if not ag_stores: continue
+            # 代行会社合計行：_make_csv_rowに代行会社内全店舗を渡して集計
+            _csv_rows.append(_make_csv_row(f'【{agency}】', ag_stores))
+            for sname in ag_stores:
+                _csv_rows.append(_make_csv_row(sname, [sname]))
 
-    html += '</tbody></table>'
-    st.markdown('<div class="ov-wrap">' + html + '</div>', unsafe_allow_html=True)
+        # CSV出力
+        _csv_buf = _io_csv.StringIO()
+        import csv as _csv_mod
+        _writer = _csv_mod.writer(_csv_buf)
+        _writer.writerows(_csv_rows)
+        _csv_str = _csv_buf.getvalue()
 
-
+        _period_label_csv = f'{sel_year}年{sel_month_num}月' + ('' if sel_week_range is None else f'_W{[i for i,(l,r) in enumerate([(w[0],w[1]) for w in [sel_week_range]],1)][0]}')
+        st.download_button(
+            label='📥 CSVダウンロード',
+            data=_csv_str.encode('utf-8-sig'),  # BOM付きUTF-8（Excel対応）
+            file_name=f'サマリー_{_period_label_csv}.csv',
+            mime='text/csv',
+            key='summary_csv_dl'
+        )
+    
+    
 # ══════════════════════════════════════════════
 # TAB 1: 実績・前年比
 # ══════════════════════════════════════════════
-with tab_main:
+elif st.session_state.get('current_page', 'summary') == 'detail':
     if not uploaded_now:
         st.info("⬆️ 上のCSVアップロードエリアから今年のCSVをアップロードしてください。")
         st.dataframe(master_df[["店舗コード","店舗名","代行会社","エリア","AM名"]], use_container_width=True)
@@ -822,23 +1690,12 @@ with tab_main:
         st.warning("左サイドバーで店舗を1つ以上選択してください。")
         st.stop()
 
-    sales_now  = load_csv(uploaded_now)
-    sales_prev = load_csv(uploaded_prev) if uploaded_prev else None
-    has_prev   = sales_prev is not None
+    has_prev   = not _long_prev_cached.empty
+    # 目標はグローバルセクションで1回だけ読み込み済み（③で処理済み）
 
-    # 目標CSVが両方アップロードされていたら自動で目標を読み込み・上書き
-    if uploaded_target_sales and uploaded_target_zasu:
-        uploaded_now.seek(0)
-        csv_targets = load_targets_from_csv(
-            uploaded_now, uploaded_target_sales, uploaded_target_zasu, master_df
-        )
-        uploaded_now.seek(0)
-        if csv_targets:
-            merged = {**st.session_state.targets, **csv_targets}
-            st.session_state.targets = merged
-            save_targets(merged)
-
-    date_cols_now = get_date_cols(sales_now)
+    # date_cols は long_now_cached の日付_原本列から取得（sales_now不要）
+    _raw_dates_det = sorted(_long_now_cached['日付_原本'].unique()) if not _long_now_cached.empty and '日付_原本' in _long_now_cached.columns else []
+    date_cols_now = _raw_dates_det
     period_label  = f"{date_cols_now[0]} 〜 {date_cols_now[-1]}" if date_cols_now else "不明"
 
     st.caption(
@@ -846,46 +1703,79 @@ with tab_main:
         + ("　｜　✅ 前年データあり" if has_prev else "　｜　⚠️ 前年データなし")
     )
 
-    long_now  = to_long(sales_now,  selected_stores, "今年", master_df)
-    long_prev = to_long(sales_prev, selected_stores, "前年", master_df) if has_prev else pd.DataFrame()
+    long_now  = _long_now_cached
+    long_prev = _long_prev_cached
     long_all  = pd.concat([long_now, long_prev], ignore_index=True) if has_prev else long_now
     targets   = st.session_state.targets
 
     # ── KPI カード ──
-    # MTD: 今年CSVの最終日(月日)までに前年データを絞って比較
-    now_dates  = sorted(long_now["月日"].unique()) if not long_now.empty else []
-    mtd_cutoff = now_dates[-1] if now_dates else None  # 例: "03/16"
+    # long_nowはキャッシュ済み全期間DF → MTD（昨日まで・同月）に絞って計算
+    import datetime as _dt_det
+    _det_yesterday = _dt_det.date.today() - _dt_det.timedelta(days=1)
+    _det_month_str = f"{_det_yesterday.month:02d}"
+    _det_cutoff_md = f"{_det_yesterday.month:02d}/{_det_yesterday.day:02d}"
+    long_now_mtd = long_now[
+        (long_now["月日"].str.split("/").str[0] == _det_month_str) &
+        (long_now["月日"] <= _det_cutoff_md)
+    ] if not long_now.empty else long_now
+    # 前年MTD：前年CSVの月日から逆引き → 今年MTD範囲に対応する前年月日を取得
+    if not long_prev.empty:
+        _det_prev_all_days = list(long_prev["月日"].unique())
+        _det_reverse_map = get_yoy_prev_days_from_prev(_det_prev_all_days, mode="dow")
+        _det_now_days_set = set(long_now_mtd["月日"].unique()) if not long_now_mtd.empty else set()
+        _det_prev_days = {prev_md for now_md, prev_md in _det_reverse_map.items() if now_md in _det_now_days_set}
+        _det_dow_map   = {now_md: prev_md for now_md, prev_md in _det_reverse_map.items() if now_md in _det_now_days_set}
+        long_prev_mtd = long_prev[long_prev["月日"].isin(_det_prev_days)] if _det_prev_days else pd.DataFrame()
+    else:
+        long_prev_mtd = long_prev
+        _det_dow_map = {}
+
+    now_dates  = sorted(long_now_mtd["月日"].unique()) if not long_now_mtd.empty else []
+    mtd_cutoff = now_dates[-1] if now_dates else None
 
     st.subheader("📌 期間合計 KPI")
     kpi_items = [("受注金額(税抜)","💴","円"),("座数","🪑",""),("客数","👥","人"),("CVR","📈","%"),("客単価","🏷️","円")]
 
     # 目標MTD計算：今年の期間内日付を特定して目標CSVから累計
-    def get_target_mtd(metric, store_names):
-        """対象店舗×期間内の目標合計を返す"""
+    def get_target_mtd(metric, store_names, cutoff_date=None):
+        """昨日までの日別目標積み上げを返す（インデックス高速版）"""
+        import datetime, calendar
+        if cutoff_date is None:
+            cutoff_date = _det_yesterday
+        _tidx = st.session_state.get('_target_index', {})
         total = 0.0
         found = False
         for sname in store_names:
-            k = targets.get(f"{sname}_{metric}")
+            key = (sname, metric, cutoff_date.year, cutoff_date.month)
+            for d, v in _tidx.get(key, []):
+                if d <= cutoff_date:
+                    total += v
+                    found = True
+        if found:
+            return total
+        # フォールバック：月間目標×日数按分
+        total_days = calendar.monthrange(cutoff_date.year, cutoff_date.month)[1]
+        elapsed = (cutoff_date - datetime.date(cutoff_date.year, cutoff_date.month, 1)).days + 1
+        ratio = elapsed / total_days
+        for sname in store_names:
+            k = targets.get(f'{sname}_{metric}')
             if k:
                 try:
-                    total += float(k)
+                    total += float(k) * ratio
                     found = True
-                except:
-                    pass
-        # 店舗別がなければ全体共通目標
+                except: pass
         if not found:
-            k = targets.get(f"月間_{metric}")
+            k = targets.get(f'月間_{metric}')
             if k:
                 try:
-                    total = float(k)
+                    total = float(k) * ratio
                     found = True
-                except:
-                    pass
+                except: pass
         return total if found else None
 
     kpi_cols = st.columns(5)
     for i, (metric, icon, unit) in enumerate(kpi_items):
-        sub_now = long_now[long_now["指標"]==metric]["値"]
+        sub_now = long_now_mtd[long_now_mtd["指標"]==metric]["値"]
         val_now = sub_now.mean() if metric in AVG_METRICS else sub_now.sum()
 
         if metric in AVG_METRICS:
@@ -910,13 +1800,10 @@ with tab_main:
                 delta_color = "inverse"   # 赤・↓
         # ② 目標がなければ「前年比MTD ◯%」形式で表示
         elif has_prev and mtd_cutoff:
-            prev_mtd = long_prev[
-                (long_prev["指標"]==metric) &
-                (long_prev["月日"] <= mtd_cutoff)
-            ]["値"]
+            prev_mtd = long_prev_mtd[long_prev_mtd["指標"]==metric]["値"]
             val_prev = prev_mtd.mean() if metric in AVG_METRICS else prev_mtd.sum()
             if not pd.isna(val_prev) and val_prev != 0:
-                yoy = val_now / val_prev * 100
+                yoy = val_now / abs(val_prev) * 100
                 delta_str = f"前年比MTD {yoy:.1f}%"
                 if yoy >= 100:
                     delta_color = "normal"
@@ -958,134 +1845,555 @@ with tab_main:
         st.divider()
 
     # ── 指標タブ ──
-    metric_tabs = st.tabs(KEY_METRICS)
-    for tab, metric in zip(metric_tabs, KEY_METRICS):
-        with tab:
-            sub = long_all[long_all["指標"]==metric]
-            if sub.empty:
-                st.write("データがありません")
-                continue
+    # 指標選択（ラジオボタン横並び）
+    sel_metric = st.radio(
+        "指標",
+        KEY_METRICS,
+        horizontal=True,
+        key="selected_metric_radio",
+        label_visibility="collapsed"
+    )
+    st.session_state.selected_metric = sel_metric
+    metric = sel_metric
 
-            chart_now = long_now[long_now["指標"]==metric].groupby("月日")["値"].sum().rename("今年")
-            chart_data = pd.DataFrame(chart_now)
-            if has_prev:
-                chart_prev = long_prev[long_prev["指標"]==metric].groupby("月日")["値"].sum().rename("前年")
-                chart_data = chart_data.join(chart_prev, how="outer")
-            st.line_chart(chart_data.sort_index(), height=220)
+    sub = long_all[long_all["指標"]==metric]
+    if sub.empty:
+        st.write("データがありません")
+    else:
 
-            # 前年もMTD（今年の最終月日まで）に絞り込む
-            mtd_cut = sorted(long_now["月日"].unique())[-1] if not long_now.empty else None
-            long_prev_mtd = long_prev[long_prev["月日"] <= mtd_cut] if (has_prev and mtd_cut and not long_prev.empty) else long_prev
+        import plotly.graph_objects as go
+        import calendar as _cal_chart
+        # ── X軸：当月1日〜末日を全て生成（今年の日付で固定）──
+        _chart_year  = _det_yesterday.year
+        _chart_month = _det_yesterday.month
+        _chart_last  = _cal_chart.monthrange(_chart_year, _chart_month)[1]
+        _all_month_days = [f"{_chart_month:02d}/{d:02d}" for d in range(1, _chart_last + 1)]
 
-            agg_now  = long_now[long_now["指標"]==metric].groupby("店舗名")["値"].mean() if metric in AVG_METRICS                        else long_now[long_now["指標"]==metric].groupby("店舗名")["値"].sum()
-            pivot = pd.DataFrame({"今年": agg_now})
+        # 今年実績：実績があるMTD分のみ値あり、それ以降はNaN
+        _chart_now_df = long_now[
+            (long_now["指標"]==metric) &
+            (long_now["月日"].str.split("/").str[0] == _det_month_str)
+        ]
+        # 客単価・CVR等の平均指標はmean、それ以外はsum
+        _chart_aggfunc = "mean" if metric in AVG_METRICS else "sum"
+        _now_agg = _chart_now_df.groupby("月日")["値"].mean() if metric in AVG_METRICS else _chart_now_df.groupby("月日")["値"].sum()
+        # 月末まで全日付のDataFrameを作成（実績なし日はNaN）
+        chart_data = pd.DataFrame(index=_all_month_days)
+        chart_data.index.name = "月日"
+        chart_data["今年"] = chart_data.index.map(lambda md: _now_agg.get(md, None))
+        # MTD以降（昨日より後）はNaNのまま → 点線にならず途切れる
+        chart_data.loc[chart_data.index > _det_cutoff_md, "今年"] = None
 
-            if has_prev and not long_prev_mtd.empty:
-                agg_prev = long_prev_mtd[long_prev_mtd["指標"]==metric].groupby("店舗名")["値"].mean() if metric in AVG_METRICS                            else long_prev_mtd[long_prev_mtd["指標"]==metric].groupby("店舗名")["値"].sum()
-                pivot["前年(MTD)"] = agg_prev
+        if has_prev:
+            # 前年グラフ：前年CSVの月日から逆引き → 今年の各日付に前年値をマッピング
+            _prev_agg = long_prev[long_prev["指標"]==metric].groupby("月日")["値"].mean() if metric in AVG_METRICS else long_prev[long_prev["指標"]==metric].groupby("月日")["値"].sum()
+            _prev_all_days = list(_prev_agg.index)
+            _chart_reverse_map = get_yoy_prev_days_from_prev(_prev_all_days, mode="dow")
+            # _chart_dow_map: {今年MM/DD: 前年MM/DD}（ホバー表示用）
+            _chart_dow_map = {now_md: prev_md for now_md, prev_md in _chart_reverse_map.items()}
+            chart_data["前年"] = [
+                _prev_agg.get(_chart_dow_map.get(md, ""), None)
+                for md in _all_month_days
+            ]
+        else:
+            _chart_dow_map = {}
+        def _fmt_val(v):
+            if v is None or (isinstance(v, float) and pd.isna(v)): return '—'
+            if metric == 'CVR': return f'{v:.1f}%'
+            if metric in ['受注金額(税抜)','客単価','坪単価']: return f'{v:,.0f}円'
+            if metric in ['客数','座数']: return f'{v:,.0f}人'
+            return f'{v:,.0f}'
+        # Y軸フォーマット
+        if metric in ['受注金額(税抜)','客単価','坪単価']:
+            ytickfmt = ',.0f'
+        elif metric == 'CVR':
+            ytickfmt = '.1f'
+        else:
+            ytickfmt = ',.0f'
+        fig = go.Figure()
+        # 今年トレース（MTDまで実線・マーカー）
+        _now_x = [md for md in chart_data.index if pd.notna(chart_data.loc[md, '今年'])]
+        _now_y = [chart_data.loc[md, '今年'] for md in _now_x]
+        hover_custom = []
+        for md in _now_x:
+            vn = chart_data.loc[md, '今年']
+            vp = chart_data.loc[md, '前年'] if (has_prev and '前年' in chart_data.columns) else None
+            if isinstance(vp, float) and pd.isna(vp): vp = None
+            yoy = (vn / vp * 100) if (vp and vp != 0 and vn and not pd.isna(vn)) else None
+            prev_md = _chart_dow_map.get(md, '—')
+            try:
+                pm, pd_ = prev_md.split('/')
+                prev_md_label = f'{int(pm)}/{int(pd_)}'
+            except:
+                prev_md_label = prev_md
+            hover_custom.append([
+                _fmt_val(vn),
+                _fmt_val(vp),
+                f'{yoy:.1f}%' if yoy else '—',
+                prev_md_label,
+            ])
+        fig.add_trace(go.Scatter(
+            x=_now_x, y=_now_y,
+            name='今年', mode='lines+markers',
+            line=dict(color='#1a3a5c', width=2),
+            marker=dict(size=4),
+            customdata=hover_custom,
+            hovertemplate=(
+                '<b>%{x}</b><br>'
+                '今年実績：%{customdata[0]}<br>'
+                '前年実績：%{customdata[1]}（前年%{customdata[3]}）<br>'
+                '前年比：%{customdata[2]}'
+                '<extra></extra>'
+            )
+        ))
+        # 前年トレース（月末まで全期間・点線）
+        if has_prev and '前年' in chart_data.columns:
+            _prev_x = [md for md in chart_data.index if pd.notna(chart_data.loc[md, '前年'])]
+            _prev_y = [chart_data.loc[md, '前年'] for md in _prev_x]
+            # 前年ホバー：対応する今年日付と前年日付を表示
+            prev_hover = []
+            for md in _prev_x:
+                vp = chart_data.loc[md, '前年']
+                prev_md = _chart_dow_map.get(md, '—')
+                try:
+                    pm, pd_ = prev_md.split('/')
+                    prev_md_label = f'{int(pm)}/{int(pd_)}'
+                except:
+                    prev_md_label = prev_md
+                prev_hover.append([_fmt_val(vp), prev_md_label])
+            fig.add_trace(go.Scatter(
+                x=_prev_x, y=_prev_y,
+                name='前年（曜日合わせ）', mode='lines',
+                line=dict(color='#b0c8d8', width=1.5, dash='dot'),
+                customdata=prev_hover,
+                hovertemplate=(
+                    '<b>%{x}</b>（前年%{customdata[1]}）<br>'
+                    '前年実績：%{customdata[0]}'
+                    '<extra></extra>'
+                )
+            ))
+        # X軸ラベル：03/01 → 3/1 形式に変換
+        xtick_labels = []
+        for md in chart_data.index:
+            try:
+                m_part, d_part = md.split('/')
+                xtick_labels.append(f'{int(m_part)}/{int(d_part)}')
+            except:
+                xtick_labels.append(md)
+        fig.update_layout(
+            height=240, margin=dict(l=10, r=10, t=10, b=30),
+            plot_bgcolor='white', paper_bgcolor='white',
+            legend=dict(orientation='h', y=-0.18, font=dict(size=11)),
+            xaxis=dict(
+                showgrid=False,
+                tickmode='array',
+                tickvals=list(chart_data.index),
+                ticktext=xtick_labels,
+                tickfont=dict(size=10),
+                nticks=len(chart_data),
+            ),
+            yaxis=dict(
+                showgrid=True,
+                gridcolor='#f0f0f0',
+                tickfont=dict(size=10),
+                tickformat=ytickfmt,
+                separatethousands=True,
+            ),
+            hoverlabel=dict(
+                bgcolor='white',
+                bordercolor='#cccccc',
+                font_size=12,
+                font_family='M PLUS 1p',
+            ),
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-            if has_prev and "前年(MTD)" in pivot.columns:
-                pivot["前年比(%)"] = pivot.apply(lambda r: yoy_delta(r.get("今年"), r.get("前年(MTD)")), axis=1)
-                if metric in TARGET_METRICS:
-                    def get_target(sname, m=metric):
-                        k = targets.get(f"{sname}_{m}") or targets.get(f"月間_{m}")
-                        return float(k) if k else None
-                    pivot["目標(MTD)"] = pivot.index.map(get_target)
-                    pivot["達成率(%)"] = pivot.apply(
-                        lambda r: r["今年"]/r["目標(MTD)"]*100 if pd.notna(r.get("目標(MTD)")) and r["目標(MTD)"]>0 else None, axis=1
-                    )
-                    cols_show = [c for c in ["目標(MTD)","今年","達成率(%)","前年(MTD)","前年比(%)"] if c in pivot.columns]
-                    fmt = {
-                        "目標(MTD)": lambda x: f"{x:,.0f}" if pd.notna(x) else "—",
-                        "今年":       lambda x: f"{x:,.1f}" if pd.notna(x) else "—",
-                        "達成率(%)":  lambda x: f"{x:.1f}%" if pd.notna(x) else "—",
-                        "前年(MTD)": lambda x: f"{x:,.1f}" if pd.notna(x) else "—",
-                        "前年比(%)":  lambda x: f"{chr(43) if x>=0 else str()}{x:.1f}%" if pd.notna(x) else "—",
-                    }
-                    styled = pivot[cols_show].style.format(fmt)                        .applymap(color_delta, subset=["前年比(%)"])                        .applymap(color_achievement, subset=["達成率(%)"] if "達成率(%)" in pivot.columns else [])
-                else:
-                    cols_show = [c for c in ["今年","前年(MTD)","前年比(%)"] if c in pivot.columns]
-                    fmt = {
-                        "今年":       lambda x: f"{x:,.1f}" if pd.notna(x) else "—",
-                        "前年(MTD)": lambda x: f"{x:,.1f}" if pd.notna(x) else "—",
-                        "前年比(%)":  lambda x: f"{chr(43) if x>=0 else str()}{x:.1f}%" if pd.notna(x) else "—",
-                    }
-                    styled = pivot[cols_show].style.format(fmt).applymap(color_delta, subset=["前年比(%)"])
-                st.dataframe(styled, use_container_width=True)
+        # 店舗別テーブル：前年も曜日合わせ（long_prev_mtdは上で定義済み）
+        agg_now  = long_now_mtd[long_now_mtd["指標"]==metric].groupby("店舗名")["値"].mean() if metric in AVG_METRICS                    else long_now_mtd[long_now_mtd["指標"]==metric].groupby("店舗名")["値"].sum()
+        pivot = pd.DataFrame({"今年": agg_now})
+
+        if has_prev and not long_prev_mtd.empty:
+            agg_prev = long_prev_mtd[long_prev_mtd["指標"]==metric].groupby("店舗名")["値"].mean() if metric in AVG_METRICS                        else long_prev_mtd[long_prev_mtd["指標"]==metric].groupby("店舗名")["値"].sum()
+            pivot["前年(MTD)"] = agg_prev
+
+        if has_prev and "前年(MTD)" in pivot.columns:
+            pivot["前年比(%)"] = pivot.apply(lambda r: yoy_delta(r.get("今年"), r.get("前年(MTD)")), axis=1)
+            if metric in TARGET_METRICS:
+                # 目標(MTD)：get_target_mtd（昨日までの日別積み上げ）を使用
+                pivot["目標(MTD)"] = [
+                    get_target_mtd(metric, [sname], cutoff_date=_det_yesterday)
+                    for sname in pivot.index
+                ]
+                pivot["達成率(%)"] = pivot.apply(
+                    lambda r: r["今年"]/r["目標(MTD)"]*100 if pd.notna(r.get("目標(MTD)")) and r["目標(MTD)"]>0 else None, axis=1
+                )
+                cols_show = [c for c in ["目標(MTD)","今年","達成率(%)","前年(MTD)","前年比(%)"] if c in pivot.columns]
+                def _mfmt(x, m=metric):
+                    if pd.isna(x): return '—'
+                    if m == 'CVR': return f'{x:.1f}%'
+                    if m in ['受注金額(税抜)','客単価','坪単価']: return f'{x:,.0f}円'
+                    if m in ['客数','座数']: return f'{x:,.0f}人'
+                    return f'{x:,.0f}'
+                fmt = {
+                    '目標(MTD)': lambda x: _mfmt(x),
+                    '今年':       lambda x: _mfmt(x),
+                    '達成率(%)':  lambda x: f'{x:.1f}%' if pd.notna(x) else '—',
+                    '前年(MTD)': lambda x: _mfmt(x),
+                    '前年比(%)':  lambda x: f'{x:.1f}%' if pd.notna(x) else '—',
+                }
+                styled = pivot[cols_show].style.format(fmt)                        .applymap(color_delta, subset=["前年比(%)"])                        .applymap(color_achievement, subset=["達成率(%)"] if "達成率(%)" in pivot.columns else [])
             else:
-                pivot_now = long_now[long_now["指標"]==metric].pivot_table(
-                    index="店舗名", columns="月日", values="値", aggfunc="sum"
+                cols_show = [c for c in ["今年","前年(MTD)","前年比(%)"] if c in pivot.columns]
+                def _mfmt2(x, m=metric):
+                    if pd.isna(x): return '—'
+                    if m == 'CVR': return f'{x:.1f}%'
+                    if m in ['受注金額(税抜)','客単価','坪単価']: return f'{x:,.0f}円'
+                    if m in ['客数','座数']: return f'{x:,.0f}人'
+                    return f'{x:,.0f}'
+                fmt = {
+                    "今年":       lambda x: _mfmt2(x),
+                    "前年(MTD)": lambda x: _mfmt2(x),
+                    "前年比(%)":  lambda x: f"{x:.1f}%" if pd.notna(x) else "—",
+                }
+                styled = pivot[cols_show].style.format(fmt).applymap(color_delta, subset=["前年比(%)"])
+            # ── ソートUI ──
+            _sc1, _sc2, _ = st.columns([2, 1, 3])
+            _sort_options = [c for c in ["達成率(%)","前年比(%)","今年","目標(MTD)","前年(MTD)"] if c in pivot.columns]
+            with _sc1:
+                _sort_col = st.selectbox("ソート列", _sort_options, key=f"sort_col_{metric}", label_visibility="collapsed")
+            with _sc2:
+                _sort_asc = st.selectbox("順序", ["↑ 昇順(ワースト)", "↓ 降順(ベスト)"], key=f"sort_ord_{metric}", label_visibility="collapsed")
+            pivot_disp = pivot[cols_show].sort_values(_sort_col, ascending=(_sort_asc.startswith("↑")), na_position="last")
+            styled = styled.data if hasattr(styled, "data") else pivot[cols_show]
+            import io as _io_s; _fmt_backup = styled
+            if "達成率(%)" in pivot_disp.columns and "前年比(%)" in pivot_disp.columns:
+                styled = pivot_disp.style.format(fmt).applymap(color_delta, subset=["前年比(%)"]).applymap(color_achievement, subset=["達成率(%)"])
+            elif "前年比(%)" in pivot_disp.columns:
+                styled = pivot_disp.style.format(fmt).applymap(color_delta, subset=["前年比(%)"])
+            else:
+                styled = pivot_disp.style.format(fmt)
+            st.dataframe(styled, use_container_width=True)
+        else:
+            pivot_now = long_now[long_now["指標"]==metric].pivot_table(
+                index="店舗名", columns="月日", values="値", aggfunc="sum"
+            )
+            pivot_now["合計/平均"] = pivot_now.mean(axis=1) if metric in AVG_METRICS else pivot_now.sum(axis=1)
+            if metric in TARGET_METRICS:
+                def get_target2(sname, m=metric):
+                    k = targets.get(f"{sname}_{m}") or targets.get(f"月間_{m}")
+                    return float(k) if k else None
+                pivot_now["目標"] = [get_target2(s) for s in pivot_now.index]
+                pivot_now["達成率(%)"] = pivot_now.apply(
+                    lambda r: r["合計/平均"]/r["目標"]*100 if pd.notna(r.get("目標")) and r["目標"]>0 else None, axis=1
                 )
-                pivot_now["合計/平均"] = pivot_now.mean(axis=1) if metric in AVG_METRICS else pivot_now.sum(axis=1)
-                if metric in TARGET_METRICS:
-                    def get_target2(sname, m=metric):
-                        k = targets.get(f"{sname}_{m}") or targets.get(f"月間_{m}")
-                        return float(k) if k else None
-                    pivot_now["目標"] = [get_target2(s) for s in pivot_now.index]
-                    pivot_now["達成率(%)"] = pivot_now.apply(
-                        lambda r: r["合計/平均"]/r["目標"]*100 if pd.notna(r.get("目標")) and r["目標"]>0 else None, axis=1
-                    )
-                st.dataframe(
-                    pivot_now.style.format(lambda x: f"{x:,.1f}" if pd.notna(x) else "—"),
-                    use_container_width=True,
-                )
+            def _fmt_cell(x, m=metric):
+                if pd.isna(x): return "—"
+                if m == "CVR": return f"{x:.1f}%"
+                if m in ["受注金額(税抜)", "客単価", "坪単価"]: return f"{x:,.0f}円"
+                if m in ["客数", "座数"]: return f"{x:,.0f}人"
+                return f"{x:,.0f}"
+            # 達成率(%)列は%表示に上書き
+            fmt_dict = {col: _fmt_cell for col in pivot_now.columns}
+            if "達成率(%)" in pivot_now.columns:
+                fmt_dict["達成率(%)"] = lambda x: f"{x:.1f}%" if pd.notna(x) else "—"
+            st.dataframe(
+                pivot_now.style.format(fmt_dict),
+                use_container_width=True,
+            )
 
     st.divider()
-    st.subheader("🏢 代行会社別 受注金額合計")
-    agency_now = long_now[long_now["指標"]=="受注金額(税抜)"].groupby("代行会社")["値"].sum().rename("今年")
+    # 選択中の指標に連動した代行会社別集計
+    sel_metric = st.session_state.get('selected_metric', '受注金額(税抜)')
+    is_avg_sel = sel_metric in AVG_METRICS
+    st.subheader(f"🏢 代行会社別　{sel_metric}")
+    # 代行会社別もMTD（昨日まで・曜日合わせ）で集計
+    agency_now = long_now_mtd[long_now_mtd["指標"]==sel_metric].groupby("代行会社")["値"].mean().rename("今年") if is_avg_sel                  else long_now_mtd[long_now_mtd["指標"]==sel_metric].groupby("代行会社")["値"].sum().rename("今年")
     agency_tbl = pd.DataFrame(agency_now)
     if has_prev:
-        agency_prev = long_prev[long_prev["指標"]=="受注金額(税抜)"].groupby("代行会社")["値"].sum().rename("前年")
+        agency_prev = long_prev_mtd[long_prev_mtd["指標"]==sel_metric].groupby("代行会社")["値"].mean().rename("前年") if is_avg_sel                       else long_prev_mtd[long_prev_mtd["指標"]==sel_metric].groupby("代行会社")["値"].sum().rename("前年")
         agency_tbl = agency_tbl.join(agency_prev, how="left")
         agency_tbl["前年比(%)"] = agency_tbl.apply(lambda r: yoy_delta(r.get("今年"), r.get("前年")), axis=1)
+        def _afmt(x, m=sel_metric):
+            if pd.isna(x): return "—"
+            if m == "CVR": return f"{x:.1f}%"
+            if m in ["受注金額(税抜)","客単価","坪単価"]: return f"{x:,.0f}円"
+            if m in ["客数","座数","品数"]: return f"{x:,.0f}"
+            return f"{x:,.0f}"
         fmt2 = {
-            "今年":      lambda x: f"{x:,.0f}円" if pd.notna(x) else "—",
-            "前年":      lambda x: f"{x:,.0f}円" if pd.notna(x) else "—",
-            "前年比(%)": lambda x: f"{chr(43) if x>=0 else str()}{x:.1f}%" if pd.notna(x) else "—",
+            "今年":      lambda x: _afmt(x),
+            "前年":      lambda x: _afmt(x),
+            "前年比(%)": lambda x: f"{x:.1f}%" if pd.notna(x) else "—",
         }
         st.dataframe(
             agency_tbl.sort_values("今年",ascending=False).style.format(fmt2).applymap(color_delta,subset=["前年比(%)"]),
             use_container_width=True
         )
     else:
-        agency_tbl["今年"] = agency_tbl["今年"].map(lambda x: f"{x:,.0f}円")
+        agency_tbl["今年"] = agency_tbl["今年"].map(lambda x: _afmt(x) if pd.notna(x) else "—")
         st.dataframe(agency_tbl.sort_values("今年",ascending=False), use_container_width=True)
+
+# ══════════════════════════════════════════════
+# 履歴期間分析（四半期・半期・年度）
+# ══════════════════════════════════════════════
+elif st.session_state.get('current_page', 'summary') == 'history':
+    st.subheader("🗓️ 期間分析")
+    hist = _sales_history.copy()
+    tgt_hist = _target_history.copy()
+    if hist.empty:
+        st.info("⚙️ 設定から実績CSVをアップロードすると、ここに履歴が蓄積されます。")
+        st.stop()
+
+    hist["日付"] = pd.to_datetime(hist["日付"])
+    hist["会計年度"] = hist["日付"].apply(lambda d: d.year if d.month >= 3 else d.year - 1)
+    fiscal_years = sorted(hist["会計年度"].unique().tolist(), reverse=True)
+
+    pc1, pc2, pc3 = st.columns([1, 1, 1])
+    with pc1:
+        fiscal_year = st.selectbox("年度（3月始まり）", fiscal_years, key="hist_fy")
+    with pc2:
+        period_kind = st.selectbox("集計単位", ["四半期", "半期", "年度"], key="hist_kind")
+    with pc3:
+        if period_kind == "四半期":
+            _latest_month = hist[hist["会計年度"] == fiscal_year]["日付"].max().month
+            _q_default = 0 if 3 <= _latest_month <= 5 else (1 if 6 <= _latest_month <= 8 else (2 if 9 <= _latest_month <= 11 else 3))
+            period_value = st.selectbox("期間", ["Q1", "Q2", "Q3", "Q4"], index=_q_default, key="hist_q")
+        elif period_kind == "半期":
+            _latest_month = hist[hist["会計年度"] == fiscal_year]["日付"].max().month
+            _half_default = 0 if 3 <= _latest_month <= 8 else 1
+            period_value = st.selectbox("期間", ["上期", "下期"], index=_half_default, key="hist_half")
+        else:
+            period_value = None
+
+    start_date, end_date = fiscal_period_range(int(fiscal_year), period_kind, period_value)
+    max_date = hist["日付"].max().date()
+    actual_end = min(end_date, max_date)
+    period_df = hist[(hist["日付"].dt.date >= start_date) & (hist["日付"].dt.date <= actual_end)].copy()
+    prev_start = start_date - pd.Timedelta(weeks=52)
+    prev_end = actual_end - pd.Timedelta(weeks=52)
+    prev_df = hist[(hist["日付"].dt.date >= prev_start) & (hist["日付"].dt.date <= prev_end)].copy()
+    target_df = tgt_hist[
+        (pd.to_datetime(tgt_hist["日付"]).dt.date >= start_date) &
+        (pd.to_datetime(tgt_hist["日付"]).dt.date <= actual_end)
+    ].copy() if not tgt_hist.empty else _empty_history()
+
+    period_name = period_value or "通期"
+    st.caption(
+        f"📅 {fiscal_year}年度 {period_name}：{start_date:%Y/%m/%d}〜{actual_end:%Y/%m/%d}"
+        f"　｜　前年は同曜日比較（52週前）"
+    )
+
+    def _sum_metric(df, metric, stores=None):
+        sub = df[df["指標"] == metric]
+        if stores is not None:
+            sub = sub[sub["店舗名"].isin(stores)]
+        if sub.empty:
+            return None
+        return sub["値"].mean() if metric in AVG_METRICS else sub["値"].sum()
+
+    kpis = [("受注金額(税抜)", "💴 受注金額", "円"), ("座数", "🪑 座数", ""),
+            ("客数", "👥 客数", "人"), ("CVR", "📈 CVR", "%"), ("客単価", "🏷️ 客単価", "円")]
+    kc = st.columns(5)
+    for i, (metric, label, unit) in enumerate(kpis):
+        now_v = _sum_metric(period_df, metric) or 0
+        prev_v = _sum_metric(prev_df, metric)
+        delta = f"前年比 {now_v / prev_v * 100:.1f}%" if prev_v else None
+        value = f"{now_v:,.1f}{unit}" if metric == "CVR" else f"{now_v:,.0f}{unit}"
+        kc[i].metric(label, value, delta)
+
+    st.markdown("### 🏢 代行会社・店舗別")
+    report_rows = []
+    agencies = sorted([a for a in period_df["代行会社"].dropna().unique() if str(a).strip()])
+    for agency in agencies:
+        stores = sorted(period_df[period_df["代行会社"] == agency]["店舗名"].dropna().unique())
+        for label, store_list, row_type in [(f"【{agency}】", list(stores), "代行会社")] + [(s, [s], "店舗") for s in stores]:
+            sales = _sum_metric(period_df, "受注金額(税抜)", store_list) or 0
+            sales_prev = _sum_metric(prev_df, "受注金額(税抜)", store_list)
+            zasu = _sum_metric(period_df, "座数", store_list) or 0
+            zasu_prev = _sum_metric(prev_df, "座数", store_list)
+            sales_tgt = _sum_metric(target_df, "受注金額(税抜)", store_list)
+            zasu_tgt = _sum_metric(target_df, "座数", store_list)
+            report_rows.append({
+                "区分": row_type, "代行会社／店舗": label,
+                "受注実績": sales, "受注目標": sales_tgt,
+                "受注目標比": sales / sales_tgt * 100 if sales_tgt else None,
+                "受注前年比": sales / sales_prev * 100 if sales_prev else None,
+                "座数実績": zasu, "座数目標": zasu_tgt,
+                "座数目標比": zasu / zasu_tgt * 100 if zasu_tgt else None,
+                "座数前年比": zasu / zasu_prev * 100 if zasu_prev else None,
+            })
+    period_table = pd.DataFrame(report_rows)
+    st.dataframe(
+        period_table.style.format({
+            "受注実績": "{:,.0f}", "受注目標": "{:,.0f}", "座数実績": "{:,.0f}", "座数目標": "{:,.0f}",
+            "受注目標比": "{:.1f}%", "受注前年比": "{:.1f}%", "座数目標比": "{:.1f}%", "座数前年比": "{:.1f}%",
+        }, na_rep="—"),
+        use_container_width=True, hide_index=True,
+    )
+    st.download_button(
+        "📥 期間集計CSVをダウンロード",
+        period_table.to_csv(index=False).encode("utf-8-sig"),
+        file_name=f"期間分析_{fiscal_year}年度_{period_name}.csv", mime="text/csv",
+    )
+
+    with st.expander("💾 履歴データのバックアップ"):
+        st.caption("別のPCへの移行や、公開環境へ移す前の保管用です。")
+        bc1, bc2 = st.columns(2)
+        bc1.download_button("実績履歴CSV", hist.to_csv(index=False).encode("utf-8-sig"), "sales_history.csv", "text/csv")
+        bc2.download_button("目標履歴CSV", tgt_hist.to_csv(index=False).encode("utf-8-sig"), "targets_history.csv", "text/csv")
+
+# ══════════════════════════════════════════════
+# 代行会社別・TUNAG投稿用レポート
+# ══════════════════════════════════════════════
+elif st.session_state.get('current_page', 'summary') == 'report':
+    st.subheader("📨 代行会社別レポート")
+    hist = _sales_history.copy()
+    tgt_hist = _target_history.copy()
+    if hist.empty:
+        st.info("実績CSVをアップロードするとレポートを作成できます。")
+        st.stop()
+    hist["日付"] = pd.to_datetime(hist["日付"])
+    max_hist_date = hist["日付"].max().date()
+    agencies = sorted([a for a in hist["代行会社"].dropna().unique() if str(a).strip()])
+
+    rc1, rc2, rc3 = st.columns([1.4, 1.8, 2])
+    with rc1:
+        report_date = st.date_input("レポート基準日", value=max_hist_date, key="report_date")
+    weekday_default = {5: "土曜：週末ブースト", 6: "日曜：週残取り切り", 0: "月曜：前週振り返り"}.get(report_date.weekday(), "月曜：前週振り返り")
+    report_types = ["土曜：週末ブースト", "日曜：週残取り切り", "月曜：前週振り返り", "期間を指定"]
+    with rc2:
+        report_type = st.selectbox("レポート種別", report_types, index=report_types.index(weekday_default), key="report_type")
+    with rc3:
+        agency = st.selectbox("代行会社", agencies, key="report_agency")
+
+    if report_type.startswith("月曜"):
+        end_date = report_date - pd.Timedelta(days=1)
+        start_date = end_date - pd.Timedelta(days=6)
+    elif report_type.startswith("土曜"):
+        start_date = report_date.replace(day=1)
+        end_date = report_date - pd.Timedelta(days=1)
+    elif report_type.startswith("日曜"):
+        start_date = report_date.replace(day=1)
+        end_date = report_date - pd.Timedelta(days=1)
+    else:
+        dc1, dc2 = st.columns(2)
+        start_date = dc1.date_input("開始日", value=report_date.replace(day=1), key="report_start")
+        end_date = dc2.date_input("終了日", value=report_date, key="report_end")
+
+    agency_stores = sorted(hist[hist["代行会社"] == agency]["店舗名"].dropna().unique())
+    cur = hist[(hist["代行会社"] == agency) & (hist["日付"].dt.date >= start_date) & (hist["日付"].dt.date <= end_date)].copy()
+    prev_start = start_date - pd.Timedelta(weeks=52)
+    prev_end = end_date - pd.Timedelta(weeks=52)
+    prev = hist[(hist["代行会社"] == agency) & (hist["日付"].dt.date >= prev_start) & (hist["日付"].dt.date <= prev_end)].copy()
+    tgt = tgt_hist[(tgt_hist["店舗名"].isin(agency_stores)) &
+                   (pd.to_datetime(tgt_hist["日付"]).dt.date >= start_date) &
+                   (pd.to_datetime(tgt_hist["日付"]).dt.date <= end_date)].copy() if not tgt_hist.empty else _empty_history()
+
+    st.caption(f"📅 対象期間：{start_date:%Y/%m/%d}〜{end_date:%Y/%m/%d}　｜　{agency}")
+    if cur.empty:
+        st.warning("この期間の実績データはまだ蓄積されていません。")
+        st.stop()
+
+    def _rval(df, metric, stores):
+        sub = df[(df["指標"] == metric) & (df["店舗名"].isin(stores))]
+        if sub.empty: return None
+        return sub["値"].mean() if metric in AVG_METRICS else sub["値"].sum()
+
+    rr = []
+    for label, stores in [(f"🏢 {agency}", agency_stores)] + [(s, [s]) for s in agency_stores]:
+        sales = _rval(cur, "受注金額(税抜)", stores) or 0
+        sales_prev = _rval(prev, "受注金額(税抜)", stores)
+        sales_tgt = _rval(tgt, "受注金額(税抜)", stores)
+        zasu = _rval(cur, "座数", stores) or 0
+        zasu_prev = _rval(prev, "座数", stores)
+        zasu_tgt = _rval(tgt, "座数", stores)
+        rr.append({
+            "店舗名": label, "受注目標": sales_tgt, "受注実績": sales,
+            "受注目標比": sales / sales_tgt * 100 if sales_tgt else None,
+            "受注前年比": sales / sales_prev * 100 if sales_prev else None,
+            "座数目標": zasu_tgt, "座数実績": zasu,
+            "座数目標比": zasu / zasu_tgt * 100 if zasu_tgt else None,
+            "座数前年比": zasu / zasu_prev * 100 if zasu_prev else None,
+        })
+    report_df = pd.DataFrame(rr)
+    total = report_df.iloc[0]
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("💴 受注実績", f"{total['受注実績']:,.0f}円", f"前年比 {total['受注前年比']:.1f}%" if pd.notna(total['受注前年比']) else None)
+    m2.metric("🎯 受注目標比", f"{total['受注目標比']:.1f}%" if pd.notna(total['受注目標比']) else "—")
+    m3.metric("🪑 座数", f"{total['座数実績']:,.0f}", f"前年比 {total['座数前年比']:.1f}%" if pd.notna(total['座数前年比']) else None)
+    m4.metric("🎯 座数目標比", f"{total['座数目標比']:.1f}%" if pd.notna(total['座数目標比']) else "—")
+
+    st.markdown("### 📋 キャプチャ用サマリー")
+    st.dataframe(
+        report_df.style.format({
+            "受注目標": "{:,.0f}", "受注実績": "{:,.0f}", "座数目標": "{:,.0f}", "座数実績": "{:,.0f}",
+            "受注目標比": "{:.1f}%", "受注前年比": "{:.1f}%", "座数目標比": "{:.1f}%", "座数前年比": "{:.1f}%",
+        }, na_rep="—"), use_container_width=True, hide_index=True,
+    )
+
+    weak = report_df.iloc[1:].sort_values("受注目標比", na_position="last").head(3)
+    weak_names = "、".join(weak["店舗名"].tolist()) if not weak.empty else "なし"
+    heading = report_type.split("：", 1)[-1]
+    tunag_text = (
+        f"【{agency}｜{heading}】\n"
+        f"対象期間：{start_date:%Y/%m/%d}〜{end_date:%Y/%m/%d}\n"
+        f"受注実績：{total['受注実績']:,.0f}円"
+        + (f"（目標比 {total['受注目標比']:.1f}%／前年比 {total['受注前年比']:.1f}%）" if pd.notna(total['受注目標比']) and pd.notna(total['受注前年比']) else "")
+        + f"\n座数：{total['座数実績']:,.0f}"
+        + (f"（目標比 {total['座数目標比']:.1f}%／前年比 {total['座数前年比']:.1f}%）" if pd.notna(total['座数目標比']) and pd.notna(total['座数前年比']) else "")
+        + f"\n\n重点確認店舗：{weak_names}\n各店、残り期間の目標達成に向けてアクションをお願いします。"
+    )
+    st.markdown("### ✍️ TUNAG投稿文")
+    st.code(tunag_text, language=None)
+    dl1, dl2 = st.columns(2)
+    dl1.download_button("📥 レポートCSV", report_df.to_csv(index=False).encode("utf-8-sig"), f"{agency}_{report_date}.csv", "text/csv")
+    dl2.download_button("📥 TUNAG投稿文", tunag_text.encode("utf-8"), f"{agency}_{report_date}.txt", "text/plain")
 
 # ══════════════════════════════════════════════
 # TAB 2: 目標管理（デイリーカレンダー）
 # ══════════════════════════════════════════════
-with tab_target:
+elif st.session_state.get('current_page', 'summary') == 'target':
     st.subheader("🎯 目標カレンダー")
 
     # 目標CSVが未アップロードの場合
-    if not uploaded_target_sales and not uploaded_target_zasu:
+    if not _tsales_bytes and not _tzasu_bytes:
         st.info("⬆️ 上のCSVアップロードエリアから【目標】受注金額CSVと座数CSVをアップロードしてください。")
         st.stop()
 
-    # 目標CSVを読み込んでキャッシュ
-    @st.cache_data
+    # キャッシュ済みバイト列から目標DFを生成（seek/read不要）
+    # 目標カレンダー用：店舗IDでマスタ紐付け
+    _id_to_name_cal = {
+        str(r.get('店舗ID','')).strip(): str(r.get('店舗名','')).strip()
+        for _, r in master_df.iterrows()
+        if str(r.get('店舗ID','')).strip() and str(r.get('店舗ID','')).strip() != 'nan'
+    }
+
+    @st.cache_data(show_spinner=False)
     def parse_target_csv(file_bytes, metric_name):
         import io
         df = pd.read_csv(io.BytesIO(file_bytes), encoding="utf-8", header=None)
+        if df.shape[1] <= 12: return pd.DataFrame()
+        # E列=4(店舗名), F列=5(日付), M列=12(目標値)
         df = df[[4, 5, 12]].copy()
         df.columns = ["店舗名", "日付", "目標値"]
         df = df.dropna(subset=["店舗名", "日付", "目標値"])
-        df = df[~df["店舗名"].astype(str).isin(["受注目標","座数目標","スマレジ店舗ID","NaN","nan"])]
+        df["店舗名"] = df["店舗名"].astype(str).str.strip()
+        exclude = ["受注目標","座数目標","スマレジ店舗ID","nan","NaN","店舗名"]
+        df = df[~df["店舗名"].isin(exclude) & (df["店舗名"].str.len() > 1)]
         df["目標値"] = pd.to_numeric(df["目標値"].astype(str).str.replace(",",""), errors="coerce")
+        df = df[df["目標値"] > 0]
+        master_stores = set(master_df['店舗名'].dropna().astype(str).str.strip())
+        df = df[df["店舗名"].isin(master_stores)]
+        df = df.dropna(subset=["店舗名", "目標値"])
         df["日付"] = pd.to_datetime(df["日付"], errors="coerce")
         df = df.dropna(subset=["日付","目標値"])
         df["指標"] = metric_name
         return df
 
     target_dfs = []
-    if uploaded_target_sales:
-        uploaded_target_sales.seek(0)
-        tdf_s = parse_target_csv(uploaded_target_sales.read(), "受注金額(税抜)")
-        target_dfs.append(tdf_s)
-    if uploaded_target_zasu:
-        uploaded_target_zasu.seek(0)
-        tdf_z = parse_target_csv(uploaded_target_zasu.read(), "座数")
-        target_dfs.append(tdf_z)
+    if _tsales_bytes:
+        target_dfs.append(parse_target_csv(_tsales_bytes, "受注金額(税抜)"))
+    if _tzasu_bytes:
+        target_dfs.append(parse_target_csv(_tzasu_bytes, "座数"))
 
     all_targets = pd.concat(target_dfs, ignore_index=True) if target_dfs else pd.DataFrame()
 
@@ -1166,7 +2474,7 @@ with tab_target:
     html = '<table class="cal-table"><tr>'
     for di, d in enumerate(DOW):
         cls = "sat" if di==5 else ("sun" if di==6 else "")
-        html += f'<th class="cal-th {cls}">{d}</th>'
+        html_parts.append(f'<th class="cal-th {cls}">{d}</th>')
     html += "</tr>"
 
     for week in cal:
@@ -1175,7 +2483,7 @@ with tab_target:
             is_sat = (di == 5)
             is_sun = (di == 6)
             if day == 0:
-                html += '<td class="cal-td empty"></td>'
+                html_parts.append('<td class="cal-td empty"></td>')
             else:
                 td_cls = "sat" if is_sat else ("sun" if is_sun else "")
                 day_cls = "sat" if is_sat else ("sun" if is_sun else "")
@@ -1198,13 +2506,81 @@ with tab_target:
 # ══════════════════════════════════════════════
 # TAB 3: 店舗マスタ編集
 # ══════════════════════════════════════════════
-with tab_master:
+elif st.session_state.get('current_page', 'summary') == 'master':
     st.subheader("🏪 店舗マスタ編集")
     st.info("担当AM変更や店舗の追加・削除ができます。変更はアプリを閉じても保持されます。")
-
     stores = st.session_state.stores
 
-    with st.expander("➕ 新しい店舗を追加"):
+    # ── 店舗データCSVから一括追加 ──
+    with st.expander("📋 店舗データCSVから一括追加", expanded=True):
+        st.markdown("店舗データCSVを読み込んで、追加したい店舗にチェックを入れてください。")
+        uploaded_store_csv = st.file_uploader("店舗データCSV", type="csv", key="store_csv")
+        if uploaded_store_csv:
+            try:
+                uploaded_store_csv.seek(0)
+                _sdf = pd.read_csv(uploaded_store_csv, encoding='utf-8-sig')
+                # 必要な列を抽出
+                _sdf = _sdf[['店舗コード','店舗ID','ストア','エリアマネージャー','エリア','運営ステータス']].copy()
+                _sdf.columns = ['店舗コード','店舗ID','店舗名','AM名','エリア','代行会社']
+                _sdf['代行会社'] = _sdf['代行会社'].apply(lambda x: '' if x == '直営' else (str(x) if pd.notna(x) else ''))
+                _sdf = _sdf.dropna(subset=['店舗名'])
+                _sdf['店舗ID'] = _sdf['店舗ID'].apply(lambda x: str(int(x)) if pd.notna(x) else '')
+                # 既存店舗のコードリスト
+                _existing_codes = {s.get('店舗コード','') for s in stores}
+                # AMフィルター
+                _am_list = ['すべて'] + sorted(_sdf['AM名'].dropna().unique().tolist())
+                _sel_am = st.selectbox("AMで絞り込み", _am_list, key="bulk_am_filter")
+                _filtered_sdf = _sdf if _sel_am == 'すべて' else _sdf[_sdf['AM名'] == _sel_am]
+                # チェックボックス付きテーブル
+                st.markdown(f"**{len(_filtered_sdf)}店舗** が対象です。追加したい店舗を選択してください：")
+                _check_all = st.checkbox("全選択", key="check_all_stores")
+                _selected_stores_bulk = []
+                _cols = st.columns([1,3,2,2,2,2,2])
+                for ci, h in enumerate(['','店舗名','店舗コード','店舗ID','代行会社','AM名','エリア']):
+                    _cols[ci].markdown(f"**{h}**")
+                for _, row in _filtered_sdf.iterrows():
+                    _already = row['店舗コード'] in _existing_codes
+                    _c = st.columns([1,3,2,2,2,2,2])
+                    _checked = _c[0].checkbox(
+                        '', value=_check_all, key=f"chk_{row['店舗コード']}",
+                        disabled=_already
+                    )
+                    _name_text = f"~~{row['店舗名']}~~ (登録済)" if _already else row['店舗名']
+                    _c[1].write(_name_text)
+                    _c[2].write(row['店舗コード'])
+                    _c[3].write(row['店舗ID'])
+                    _c[4].write(row.get('代行会社',''))
+                    _c[5].write(row['AM名'])
+                    _c[6].write(row['エリア'])
+                    if _checked and not _already:
+                        _selected_stores_bulk.append(row)
+                # AM名を「渡邊」に変更するオプション
+                st.markdown('---')
+                _new_am_name = st.text_input("追加時のAM名（変更する場合）", value='渡邊', key="bulk_am_name")
+                _new_agency = st.text_input("代行会社（まとめて設定する場合）", value='', key="bulk_agency", placeholder="空白でも追加できます")
+                if st.button(f"✅ 選択した {len(_selected_stores_bulk)} 店舗を追加", type="primary", key="bulk_add_btn"):
+                    if _selected_stores_bulk:
+                        for _r in _selected_stores_bulk:
+                            _agency_val = _r.get('代行会社','') or _new_agency
+                            stores.append({
+                                '店舗コード': _r['店舗コード'],
+                                '店舗ID':    _r['店舗ID'],
+                                '店舗名':    _r['店舗名'],
+                                '代行会社':  _agency_val,
+                                'エリア':    _r['エリア'],
+                                'AM名':      _new_am_name,
+                            })
+                        save_master(stores)
+                        st.session_state.stores = stores
+                        st.success(f"{len(_selected_stores_bulk)} 店舗を追加しました！")
+                        st.rerun()
+                    else:
+                        st.warning("店舗を選択してください。")
+            except Exception as e:
+                st.error(f"CSVの読み込みエラー: {e}")
+
+    # ── 1店舗ずつ追加 ──
+    with st.expander("➕ 1店舗ずつ追加"):
         c1, c2, c3, c4, c5 = st.columns(5)
         new_code   = c1.text_input("店舗コード", key="new_code")
         new_name   = c2.text_input("店舗名",     key="new_name")
@@ -1225,11 +2601,17 @@ with tab_master:
     st.divider()
     st.markdown("**現在の担当店舗一覧**（クリックして直接編集できます）")
 
+    # 削除用チェックボックス列を先頭に追加
+    master_df_edit = pd.DataFrame(stores)
+    if "削除" not in master_df_edit.columns:
+        master_df_edit.insert(0, "削除", False)
+
     edited_df = st.data_editor(
-        pd.DataFrame(stores),
+        master_df_edit,
         use_container_width=True,
         num_rows="dynamic",
         column_config={
+            "削除":      st.column_config.CheckboxColumn("🗑️", width="small"),
             "店舗コード": st.column_config.TextColumn("店舗コード", width="small"),
             "店舗ID":    st.column_config.TextColumn("店舗ID（数字）", width="small"),
             "店舗名":    st.column_config.TextColumn("店舗名",    width="medium"),
@@ -1240,9 +2622,26 @@ with tab_master:
         key="master_editor"
     )
 
-    if st.button("💾 マスタを保存", type="primary"):
-        new_stores = edited_df.dropna(subset=["店舗名"]).to_dict("records")
-        save_master(new_stores)
-        st.session_state.stores = new_stores
-        st.success(f"{len(new_stores)} 店舗のマスタを保存しました！")
-        st.rerun()
+    # チェック数を取得
+    n_checked = int(edited_df["削除"].sum()) if "削除" in edited_df.columns else 0
+
+    # ボタンを右寄せ・コンパクトに配置
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    _, bc1, bc2 = st.columns([4, 1, 1])
+
+    with bc1:
+        if st.button("💾 保存", type="primary", use_container_width=True):
+            new_stores = edited_df.drop(columns=["削除"], errors="ignore").dropna(subset=["店舗名"]).to_dict("records")
+            save_master(new_stores)
+            st.session_state.stores = new_stores
+            st.success(f"{len(new_stores)} 店舗を保存しました！")
+            st.rerun()
+
+    with bc2:
+        del_label = f"🗑️ 削除 ({n_checked})" if n_checked > 0 else "🗑️ 削除"
+        if st.button(del_label, type="secondary", disabled=(n_checked == 0), use_container_width=True):
+            remaining = edited_df[edited_df["削除"] != True].drop(columns=["削除"], errors="ignore").dropna(subset=["店舗名"]).to_dict("records")
+            save_master(remaining)
+            st.session_state.stores = remaining
+            st.success(f"{n_checked} 店舗を削除しました。残り {len(remaining)} 店舗。")
+            st.rerun()
