@@ -163,15 +163,41 @@ def upsert_history(client, incoming_rows) -> tuple[int, int]:
         key = (text_row[1], text_row[0], text_row[4], text_row[5])
         if key in row_numbers:
             row_number = row_numbers[key]
-            updates.append({"range": f"A{row_number}:G{row_number}", "values": [text_row]})
+            updates.append((row_number, text_row))
         else:
             additions.append(text_row)
 
-    # Google Sheets APIの1リクエストを小さく保ち、長期履歴でも失敗しにくくする。
-    for offset in range(0, len(updates), 500):
-        sheet.batch_update(updates[offset:offset + 500])
-    for offset in range(0, len(additions), 1000):
-        sheet.append_rows(additions[offset:offset + 1000], value_input_option="RAW")
+    # 月次取得は数千行になる。1行ずつのrange更新ではなく、既存表をメモリ上で
+    # マージして連続範囲へまとめて書くことで、Google Sheets通信を大幅に減らす。
+    if len(incoming_rows) >= 1000:
+        merged = [
+            (list(row) + [""] * len(HISTORY_COLUMNS))[:len(HISTORY_COLUMNS)]
+            for row in values
+        ]
+        for row_number, text_row in updates:
+            merged[row_number - 1] = text_row
+        merged.extend(additions)
+        if sheet.row_count < len(merged) + 10:
+            sheet.resize(rows=len(merged) + 10)
+        chunk_size = 5000
+        for offset in range(0, len(merged), chunk_size):
+            chunk = merged[offset:offset + chunk_size]
+            start_row = offset + 1
+            end_row = offset + len(chunk)
+            sheet.update(
+                range_name=f"A{start_row}:G{end_row}",
+                values=chunk,
+                value_input_option="RAW",
+            )
+    else:
+        # 日次処理は変更行だけを更新し、普段の通信量を最小化する。
+        if updates:
+            sheet.batch_update([
+                {"range": f"A{row_number}:G{row_number}", "values": [text_row]}
+                for row_number, text_row in updates
+            ])
+        if additions:
+            sheet.append_rows(additions, value_input_option="RAW")
     return len(additions), len(updates)
 
 
