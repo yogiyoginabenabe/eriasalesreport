@@ -1120,6 +1120,43 @@ elif _page == 'master': _active_tab = tab_master
 else: _active_tab = tab_overview
 
 
+def _trigger_sales_backfill(start_date, end_date):
+    """画面からGitHub Actionsの過去取得処理を開始する。認証情報はGitHub側だけで使用する。"""
+    import urllib.error
+    import urllib.request
+    token = str(st.secrets.get("GITHUB_ACTIONS_TOKEN", "")).strip()
+    if not token:
+        raise RuntimeError("Streamlit Secretsに GITHUB_ACTIONS_TOKEN が設定されていません")
+    url = "https://api.github.com/repos/yogiyoginabenabe/eriasalesreport/actions/workflows/sales_daily_import.yml/dispatches"
+    payload = json.dumps({
+        "ref": "main",
+        "inputs": {
+            "store_report_date": "",
+            "backfill_start_month": start_date.strftime("%Y%m"),
+            "backfill_end_month": end_date.strftime("%Y%m"),
+        },
+    }).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=payload,
+        method="POST",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "Content-Type": "application/json",
+            "User-Agent": "Yogibo-sales-dashboard",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            if response.status != 204:
+                raise RuntimeError(f"取得処理の開始に失敗しました（HTTP {response.status}）")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"取得処理の開始に失敗しました（HTTP {exc.code}）：{detail}") from exc
+
+
 # ══════════════════════════════════════════════
 # TAB 0: 全体サマリー
 # ══════════════════════════════════════════════
@@ -1127,8 +1164,8 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
     import calendar as cal_mod
     import datetime
 
-    if not uploaded_now:
-        st.info("⬆️ 上のCSVアップロードエリアから今年のCSVをアップロードしてください。")
+    if not uploaded_now and _sales_history.empty:
+        st.info("実績データがありません。期間分析またはサマリーからデータを取得してください。")
         st.stop()
 
     if not selected_stores:
@@ -1411,7 +1448,24 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
             st.markdown(_hr, unsafe_allow_html=True)
 
     if st.session_state.get('current_page', 'top') == 'summary':
-    
+        # 保存済みDBを正本として使う。CSVアップロードがなくても年月を選択できる。
+        _summary_using_db = not _sales_history.empty
+        if _summary_using_db:
+            _summary_hist_long = _sales_history.copy()
+            _summary_hist_long["日付"] = pd.to_datetime(_summary_hist_long["日付"], errors="coerce")
+            _summary_hist_long = _summary_hist_long.dropna(subset=["日付", "指標", "値"])
+            _summary_hist_long["日付_原本"] = _summary_hist_long["日付"].dt.strftime("%Y/%m/%d")
+            _summary_hist_long["月日"] = _summary_hist_long["日付"].dt.strftime("%m/%d")
+            _summary_hist_long["年度"] = "実績"
+            date_cols_all = sorted(_summary_hist_long["日付_原本"].unique())
+            all_dates_dt = [pd.to_datetime(d) for d in date_cols_all]
+            _today_summary = datetime.date.today()
+            _current_summary_year = _today_summary.year
+            csv_years = sorted(
+                set(d.year for d in all_dates_dt) | set(range(_current_summary_year - 4, _current_summary_year + 1)),
+                reverse=True,
+            )
+
         st.markdown("### 📅 集計期間を選択")
         fc1, fc2, fc3 = st.columns([1, 1, 2])
     
@@ -1419,8 +1473,11 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
             sel_year = st.selectbox("年", csv_years, index=0, key="ov_year")
     
         with fc2:
-            month_nums = sorted(set(d.month for d in all_dates_dt if d.year == sel_year), reverse=True)
-            sel_month_label = st.selectbox("月", [f"{m}月" for m in month_nums], index=0, key="ov_month")
+            month_nums = list(range(1, 13))
+            _available_months = sorted(set(d.month for d in all_dates_dt if d.year == sel_year), reverse=True)
+            _default_month = _available_months[0] if _available_months else (datetime.date.today().month if sel_year == datetime.date.today().year else 1)
+            _month_index = month_nums.index(_default_month)
+            sel_month_label = st.selectbox("月", [f"{m}月" for m in month_nums], index=_month_index, key="ov_month")
             sel_month_num   = int(sel_month_label.replace("月", ""))
     
         with fc3:
@@ -1448,6 +1505,31 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
             sel_week_idx   = week_options.index(sel_week_label)
             sel_week_range = week_date_ranges[sel_week_idx]
     
+        _summary_month_start = datetime.date(sel_year, sel_month_num, 1)
+        _summary_month_end = datetime.date(sel_year, sel_month_num, cal_mod.monthrange(sel_year, sel_month_num)[1])
+        fetch_col, refresh_col, note_col = st.columns([1.4, 1.2, 4])
+        with fetch_col:
+            if st.button("⬇️ 選択月のデータを取得", type="primary", use_container_width=True, key="summary_fetch"):
+                with st.spinner("取得処理を開始しています..."):
+                    try:
+                        _trigger_sales_backfill(_summary_month_start, _summary_month_end)
+                        st.session_state["_summary_fetch_started"] = (
+                            f"{sel_year}年{sel_month_num}月の取得を開始しました。"
+                            "通常は数分かかります。完了後に「取得結果を再読込」を押してください。"
+                        )
+                    except Exception as exc:
+                        st.error(str(exc))
+        with refresh_col:
+            if st.button("🔄 取得結果を再読込", use_container_width=True, key="summary_reload"):
+                _load_sales_history_from_db.clear()
+                st.session_state.pop("_sales_history", None)
+                st.session_state.pop("_summary_fetch_started", None)
+                st.rerun()
+        with note_col:
+            st.caption("週を選択している場合も、その週を含む月の日別データを取得します。再取得しても重複しません。")
+        if st.session_state.get("_summary_fetch_started"):
+            st.success(st.session_state["_summary_fetch_started"])
+
         # 期間に合わせて日付列を絞り込み
         if sel_week_range is None:
             date_filter = [
@@ -1521,17 +1603,25 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
             return pd.DataFrame(rows)
     
         # キャッシュ済みlong_dfを使用（高速）
-        _long_now_full = _long_now_cached
-        # 期間フィルタ（月日で絞り込むだけ）
-        filter_month_days = set()
-        for d in date_filter:
-            parts = str(d).split("/")
-            if len(parts)==3:
-                filter_month_days.add(f"{int(parts[1]):02d}/{int(parts[2]):02d}")
-        ov_long_now = _long_now_full[_long_now_full["月日"].isin(filter_month_days)] if filter_month_days else _long_now_full
+        _long_now_full = _summary_hist_long if _summary_using_db else _long_now_cached
+        if _summary_using_db:
+            ov_long_now = _long_now_full[_long_now_full["日付_原本"].isin(date_filter)].copy()
+        else:
+            # アップロードCSV利用時の互換処理
+            filter_month_days = set()
+            for d in date_filter:
+                parts = str(d).split("/")
+                if len(parts)==3:
+                    filter_month_days.add(f"{int(parts[1]):02d}/{int(parts[2]):02d}")
+            ov_long_now = _long_now_full[_long_now_full["月日"].isin(filter_month_days)] if filter_month_days else _long_now_full
     
         ov_long_prev = pd.DataFrame()
-        if ov_has_prev and not _long_prev_cached.empty:
+        if _summary_using_db:
+            _selected_dates = pd.to_datetime(pd.Series(date_filter), errors="coerce").dropna()
+            _prev_date_keys = set((_selected_dates - pd.Timedelta(weeks=52)).dt.strftime("%Y/%m/%d"))
+            ov_long_prev = _summary_hist_long[_summary_hist_long["日付_原本"].isin(_prev_date_keys)].copy()
+            ov_has_prev = not ov_long_prev.empty
+        elif ov_has_prev and not _long_prev_cached.empty:
             if sel_week_range is None:
                 # 月間累計 → 日合わせ（前年同月の同日付）
                 prev_month_days = {
@@ -2324,42 +2414,6 @@ elif st.session_state.get('current_page', 'summary') == 'detail':
 # 履歴期間分析（月・四半期・半期・年度）
 # ══════════════════════════════════════════════
 elif st.session_state.get('current_page', 'summary') == 'history':
-    def _trigger_sales_backfill(start_date, end_date):
-        """画面からGitHub Actionsの過去取得処理を開始する。認証情報はGitHub側だけで使用する。"""
-        import urllib.error
-        import urllib.request
-        token = str(st.secrets.get("GITHUB_ACTIONS_TOKEN", "")).strip()
-        if not token:
-            raise RuntimeError("Streamlit Secretsに GITHUB_ACTIONS_TOKEN が設定されていません")
-        url = "https://api.github.com/repos/yogiyoginabenabe/eriasalesreport/actions/workflows/sales_daily_import.yml/dispatches"
-        payload = json.dumps({
-            "ref": "main",
-            "inputs": {
-                "store_report_date": "",
-                "backfill_start_month": start_date.strftime("%Y%m"),
-                "backfill_end_month": end_date.strftime("%Y%m"),
-            },
-        }).encode("utf-8")
-        request = urllib.request.Request(
-            url,
-            data=payload,
-            method="POST",
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {token}",
-                "X-GitHub-Api-Version": "2022-11-28",
-                "Content-Type": "application/json",
-                "User-Agent": "Yogibo-sales-dashboard",
-            },
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=20) as response:
-                if response.status != 204:
-                    raise RuntimeError(f"取得処理の開始に失敗しました（HTTP {response.status}）")
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"取得処理の開始に失敗しました（HTTP {exc.code}）：{detail}") from exc
-
     st.subheader("🗓️ 期間分析")
     hist = _sales_history.copy()
     tgt_hist = _target_history.copy()
