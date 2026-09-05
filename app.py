@@ -2548,41 +2548,114 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         if sub.empty: return None
         return sub["値"].mean() if metric in AVG_METRICS else sub["値"].sum()
 
+    # サマリー画面と同じ6指標を、キャプチャとAI生成の共通ソースにする
+    report_metrics = [
+        ("受注金額(税抜)", "受注金額", "受注", "円", True),
+        ("座数", "座数", "座数", "", True),
+        ("客数", "客数", "客数", "", False),
+        ("CVR", "CVR", "CVR", "%", False),
+        ("客単価", "客単価", "客単価", "円", False),
+        ("品数", "品数", "品数", "", False),
+    ]
+
     rr = []
     for label, stores in [(f"🏢 {agency}", agency_stores)] + [(s, [s]) for s in agency_stores]:
-        sales = _rval(cur, "受注金額(税抜)", stores) or 0
-        sales_prev = _rval(prev, "受注金額(税抜)", stores)
-        sales_tgt = _rval(tgt, "受注金額(税抜)", stores)
-        zasu = _rval(cur, "座数", stores) or 0
-        zasu_prev = _rval(prev, "座数", stores)
-        zasu_tgt = _rval(tgt, "座数", stores)
-        rr.append({
-            "店舗名": label, "受注目標": sales_tgt, "受注実績": sales,
-            "受注目標比": sales / sales_tgt * 100 if sales_tgt else None,
-            "受注前年比": sales / sales_prev * 100 if sales_prev else None,
-            "座数目標": zasu_tgt, "座数実績": zasu,
-            "座数目標比": zasu / zasu_tgt * 100 if zasu_tgt else None,
-            "座数前年比": zasu / zasu_prev * 100 if zasu_prev else None,
-        })
+        row = {"店舗名": label}
+        for metric, _, prefix, _, has_metric_target in report_metrics:
+            actual = _rval(cur, metric, stores)
+            previous = _rval(prev, metric, stores)
+            target = _rval(tgt, metric, stores) if has_metric_target else None
+            row[f"{prefix}_実績"] = actual
+            if has_metric_target:
+                row[f"{prefix}_目標"] = target
+                row[f"{prefix}_Gap"] = actual - target if actual is not None and target is not None else None
+                row[f"{prefix}_目標比"] = actual / target * 100 if actual is not None and target else None
+            row[f"{prefix}_前年"] = previous
+            row[f"{prefix}_前年比"] = actual / previous * 100 if actual is not None and previous else None
+        rr.append(row)
+
     report_df = pd.DataFrame(rr).replace({None: float("nan")})
     total = report_df.iloc[0]
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("💴 受注実績", f"{total['受注実績']:,.0f}円", f"前年比 {total['受注前年比']:.1f}%" if pd.notna(total['受注前年比']) else None)
-    m2.metric("🎯 受注目標比", f"{total['受注目標比']:.1f}%" if pd.notna(total['受注目標比']) else "—")
-    m3.metric("🪑 座数", f"{total['座数実績']:,.0f}", f"前年比 {total['座数前年比']:.1f}%" if pd.notna(total['座数前年比']) else None)
-    m4.metric("🎯 座数目標比", f"{total['座数目標比']:.1f}%" if pd.notna(total['座数目標比']) else "—")
+    m1.metric(
+        "💴 受注実績",
+        f"{total['受注_実績']:,.0f}円" if pd.notna(total["受注_実績"]) else "—",
+        f"前年比 {total['受注_前年比']:.1f}%" if pd.notna(total["受注_前年比"]) else None,
+    )
+    m2.metric("🎯 受注目標比", f"{total['受注_目標比']:.1f}%" if pd.notna(total["受注_目標比"]) else "—")
+    m3.metric(
+        "🪑 座数",
+        f"{total['座数_実績']:,.0f}" if pd.notna(total["座数_実績"]) else "—",
+        f"前年比 {total['座数_前年比']:.1f}%" if pd.notna(total["座数_前年比"]) else None,
+    )
+    m4.metric("🎯 座数目標比", f"{total['座数_目標比']:.1f}%" if pd.notna(total["座数_目標比"]) else "—")
 
     st.markdown("### 📋 キャプチャ用サマリー")
-    report_display = report_df.copy()
-    for col in ["受注目標", "受注実績", "座数目標", "座数実績"]:
-        report_display[col] = report_display[col].map(
-            lambda value: "—" if pd.isna(value) else f"{value:,.0f}"
-        )
-    for col in ["受注目標比", "受注前年比", "座数目標比", "座数前年比"]:
-        report_display[col] = report_display[col].map(
-            lambda value: "—" if pd.isna(value) else f"{value:.1f}%"
-        )
-    st.dataframe(report_display, use_container_width=True, hide_index=True)
+    st.caption("受注金額・座数・客数・CVR・客単価・品数の全項目が、AI生成するTUNAG投稿文にも連動します。")
+
+    def _report_fmt(value, unit):
+        if value is None or pd.isna(value):
+            return "—"
+        if unit == "%":
+            return f"{value:.1f}%"
+        return f"{value:,.0f}"
+
+    def _report_rate(value):
+        if value is None or pd.isna(value):
+            return "—"
+        color = "#43aeca" if value >= 100 else "#e52b12"
+        return f'<span style="color:{color};font-weight:800">{value:.1f}%</span>'
+
+    report_css = """
+    <style>
+    .report-summary-wrap{width:100%;overflow-x:auto;border:1px solid #9edce5;border-radius:10px;margin-bottom:18px}
+    .report-summary{width:100%;min-width:1500px;border-collapse:collapse;font-size:.72rem;background:#fff}
+    .report-summary th{background:#59b4c8;color:#fff;padding:7px 10px;text-align:left;border-right:1px solid rgba(255,255,255,.75);white-space:nowrap}
+    .report-summary .sub th{background:#a9d8e2;font-size:.66rem}
+    .report-summary td{padding:7px 10px;border-right:1px solid #d8e3e6;border-bottom:1px solid #d8e3e6;white-space:nowrap}
+    .report-summary tbody tr:nth-child(even) td{background:#f7fbfc}
+    .report-summary tbody tr:first-child td{background:#d9f0f2;font-weight:800;color:#174c53}
+    .report-summary .group-start{border-left:2px solid #72c7d5}
+    .report-summary .gap-neg{color:#e52b12;font-weight:800}
+    .report-summary .gap-pos{color:#43aeca;font-weight:800}
+    </style>
+    """
+    html_parts = [report_css, '<div class="report-summary-wrap"><table class="report-summary"><thead><tr>',
+                  '<th rowspan="2">店舗名</th>']
+    for _, label, _, _, has_metric_target in report_metrics:
+        colspan = 6 if has_metric_target else 3
+        html_parts.append(f'<th class="group-start" colspan="{colspan}">{label}</th>')
+    html_parts.append('</tr><tr class="sub">')
+    for _, _, _, _, has_metric_target in report_metrics:
+        headers = ["目標", "実績", "Gap", "目標比", "前年", "前年比"] if has_metric_target else ["実績", "前年", "前年比"]
+        for hi, header in enumerate(headers):
+            html_parts.append(f'<th class="{"group-start" if hi == 0 else ""}">{header}</th>')
+    html_parts.append("</tr></thead><tbody>")
+
+    for _, row in report_df.iterrows():
+        html_parts.append(f'<tr><td>{row["店舗名"]}</td>')
+        for _, _, prefix, unit, has_metric_target in report_metrics:
+            if has_metric_target:
+                vals = [
+                    _report_fmt(row[f"{prefix}_目標"], unit),
+                    _report_fmt(row[f"{prefix}_実績"], unit),
+                ]
+                gap = row[f"{prefix}_Gap"]
+                if pd.isna(gap):
+                    gap_html = "—"
+                else:
+                    gap_cls = "gap-pos" if gap >= 0 else "gap-neg"
+                    gap_html = f'<span class="{gap_cls}">{gap:+,.0f}</span>'
+                cells = vals + [gap_html, _report_rate(row[f"{prefix}_目標比"]),
+                                _report_fmt(row[f"{prefix}_前年"], unit), _report_rate(row[f"{prefix}_前年比"])]
+            else:
+                cells = [_report_fmt(row[f"{prefix}_実績"], unit),
+                         _report_fmt(row[f"{prefix}_前年"], unit), _report_rate(row[f"{prefix}_前年比"])]
+            for ci, cell in enumerate(cells):
+                html_parts.append(f'<td class="{"group-start" if ci == 0 else ""}">{cell}</td>')
+        html_parts.append("</tr>")
+    html_parts.append("</tbody></table></div>")
+    st.markdown("".join(html_parts), unsafe_allow_html=True)
 
     st.markdown("### 💬 日報レスポンス候補")
     st.caption(f"対象日報：{diary_start:%Y/%m/%d}〜{diary_end:%Y/%m/%d}（新しさ→具体的行動→承認しやすさ→売上との関連性で選定）")
@@ -2605,16 +2678,16 @@ elif st.session_state.get('current_page', 'summary') == 'report':
     )
     st.caption("💡 キャンペーン期限、現場の合言葉、必ず実行してほしい接客行動などを入れると、より渡邊AMらしいレポートになります。")
 
-    weak = report_df.iloc[1:].sort_values("受注目標比", na_position="last").head(3)
+    weak = report_df.iloc[1:].sort_values("受注_目標比", na_position="last").head(3)
     weak_names = "、".join(weak["店舗名"].tolist()) if not weak.empty else "なし"
     heading = report_type.split("：", 1)[-1]
     tunag_text = (
         f"【{agency}｜{heading}】\n"
         f"対象期間：{start_date:%Y/%m/%d}〜{end_date:%Y/%m/%d}\n"
-        f"受注実績：{total['受注実績']:,.0f}円"
-        + (f"（目標比 {total['受注目標比']:.1f}%／前年比 {total['受注前年比']:.1f}%）" if pd.notna(total['受注目標比']) and pd.notna(total['受注前年比']) else "")
-        + f"\n座数：{total['座数実績']:,.0f}"
-        + (f"（目標比 {total['座数目標比']:.1f}%／前年比 {total['座数前年比']:.1f}%）" if pd.notna(total['座数目標比']) and pd.notna(total['座数前年比']) else "")
+        f"受注実績：{total['受注_実績']:,.0f}円"
+        + (f"（目標比 {total['受注_目標比']:.1f}%／前年比 {total['受注_前年比']:.1f}%）" if pd.notna(total['受注_目標比']) and pd.notna(total['受注_前年比']) else "")
+        + f"\n座数：{total['座数_実績']:,.0f}"
+        + (f"（目標比 {total['座数_目標比']:.1f}%／前年比 {total['座数_前年比']:.1f}%）" if pd.notna(total['座数_目標比']) and pd.notna(total['座数_前年比']) else "")
         + f"\n\n重点確認店舗：{weak_names}\n各店、残り期間の目標達成に向けてアクションをお願いします。"
     )
     # Gemini APIが設定済みの場合のみ、選定した日報と売上データから文章を生成
@@ -2634,7 +2707,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
 1. 【週次｜レポート】
 2. 「おはようございます！」から始め、前週への労い→数値で確認できる全体像→現場課題の順に3〜5段落で展開。
 3. データがある場合のみ、受注・座数の目標達成店舗を祝う。ない指標や店舗は書かない。
-4. 【週間実績】として会社全体の受注・座数の実績、目標比、前年比を整理。
+4. 【週間実績】として会社全体の受注金額・座数・客数・CVR・客単価・品数を、存在する目標比／前年比とともに整理。
 5. 【Good / Opportunity】
    Goodは数字または日報の具体的な強み、Opportunityは改善余地と現場での打ち手を記載。
 6. 【SM日報レスポンス】
@@ -2649,8 +2722,8 @@ elif st.session_state.get('current_page', 'summary') == 'report':
 【土曜・日曜のブーストレポート型】
 1. データから導ける、短く熱い見出しを【○○🔥🔥】の形で作る。根拠なく達成を断言しない。
 2. 「おはようございます！」から始め、直近期間への労い→現在地→週末の勝負どころを3〜5段落で展開。
-3. 受注と座数を並べるだけでなく、両者の組み合わせから読める現場課題を慎重に説明する。
-   例：座数が弱ければ接客機会の確保、座数に比べ受注が弱ければ成約・単価面が論点。ただし断定せず「可能性」「次に確認したい点」とする。
+3. 受注・座数・客数・CVR・客単価・品数を横断し、組み合わせから読める現場課題を慎重に説明する。
+   例：座数が弱ければ接客機会、CVRが弱ければ成約、客単価や品数が弱ければセット提案が確認点。ただし断定せず「可能性」「次に確認したい点」とする。
 4. 【SM日報レスポンス】
    選定済み全員に対し「●氏名さん（店舗名）：」で返信。
    必ず「具体的な接客・成約・工夫→なぜ価値があるか→本日の再現行動」の3点を1人2〜4文でつなぐ。
