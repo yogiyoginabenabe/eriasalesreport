@@ -53,15 +53,23 @@ def login(page) -> None:
         raise RuntimeError("ログイン失敗：ID・パスワードを確認してください")
 
 
-def fetch_report_csv(page, start_ymd: str, end_ymd: str | None = None, button: str = "CSV ver.3") -> bytes:
-    """GETフォームを直接呼び、指定期間の日別CSV ver.3を取得する。"""
+def fetch_report_csv(
+    page,
+    start_ymd: str,
+    end_ymd: str | None = None,
+    button: str = "CSV ver.3",
+    period: str = "d",
+) -> bytes:
+    """GETフォームを直接呼び、指定期間・表示形式のCSV ver.3を取得する。"""
+    if period not in {"d", "w", "m"}:
+        raise ValueError(f"未対応の表示形式です: {period}")
     end_ymd = end_ymd or start_ymd
     query = {
         "action": "input",
         "sdate": start_ymd,
         "edate": end_ymd,
         "store_type": "0",
-        "period": "d",
+        "period": period,
         "btn": button,
     }
     url = f"{BASE}{REPORT_PATH}?{urllib.parse.urlencode(query)}"
