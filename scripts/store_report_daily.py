@@ -38,24 +38,37 @@ def google_client():
     raw = required_env("GCP_SERVICE_ACCOUNT_JSON").strip()
     credentials = None
 
+    def find_credentials(value):
+        """TOMLの任意キーや引用文字列の中からサービスアカウント辞書を探す。"""
+        if isinstance(value, dict):
+            if value.get("client_email") and value.get("private_key"):
+                return value
+            for child in value.values():
+                found = find_credentials(child)
+                if found:
+                    return found
+        elif isinstance(value, str):
+            candidate = value.strip()
+            try:
+                return find_credentials(json.loads(candidate))
+            except (json.JSONDecodeError, TypeError):
+                return None
+        return None
+
     # GitHub Secretには、JSONファイルの中身とStreamlit用TOMLの
     # どちらが貼られていても動くようにする。
     try:
-        credentials = json.loads(raw)
-        if isinstance(credentials, str):
-            credentials = json.loads(credentials)
+        credentials = find_credentials(json.loads(raw))
     except (json.JSONDecodeError, TypeError):
         try:
             parsed = tomllib.loads(raw)
-            credentials = parsed.get("gcp_service_account", parsed)
-            if isinstance(credentials, str):
-                credentials = json.loads(credentials)
+            credentials = find_credentials(parsed)
         except (tomllib.TOMLDecodeError, json.JSONDecodeError, TypeError):
             # `GCP_SERVICE_ACCOUNT_JSON = {JSON}` のような貼り方も救済する。
             first_brace = raw.find("{")
             last_brace = raw.rfind("}")
             if first_brace >= 0 and last_brace > first_brace:
-                credentials = json.loads(raw[first_brace:last_brace + 1])
+                credentials = find_credentials(json.loads(raw[first_brace:last_brace + 1]))
 
     if not isinstance(credentials, dict) or not credentials.get("client_email"):
         raise RuntimeError(
