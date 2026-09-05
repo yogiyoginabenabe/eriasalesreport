@@ -625,6 +625,11 @@ def target_bytes_to_history(file_bytes, metric_name, master_df):
 def fiscal_period_range(fiscal_year, period_kind, period_value=None):
     """3月期首。fiscal_yearは期首年（例: 2026年度=2026/03〜2027/02）。"""
     import datetime
+    if period_kind == "月":
+        month = int(str(period_value).replace("月", ""))
+        year = fiscal_year if month >= 3 else fiscal_year + 1
+        import calendar
+        return datetime.date(year, month, 1), datetime.date(year, month, calendar.monthrange(year, month)[1])
     if period_kind == "年度":
         import calendar
         end_year = fiscal_year + 1
@@ -2316,8 +2321,45 @@ elif st.session_state.get('current_page', 'summary') == 'detail':
         st.dataframe(agency_tbl.sort_values("今年",ascending=False), use_container_width=True)
 
 # ══════════════════════════════════════════════
-# 履歴期間分析（四半期・半期・年度）
+# 履歴期間分析（月・四半期・半期・年度）
 # ══════════════════════════════════════════════
+def _trigger_sales_backfill(start_date, end_date):
+    """画面からGitHub Actionsの過去取得処理を開始する。認証情報はGitHub側だけで使用する。"""
+    import urllib.error
+    import urllib.request
+    token = str(st.secrets.get("GITHUB_ACTIONS_TOKEN", "")).strip()
+    if not token:
+        raise RuntimeError("Streamlit Secretsに GITHUB_ACTIONS_TOKEN が設定されていません")
+    url = "https://api.github.com/repos/yogiyoginabenabe/eriasalesreport/actions/workflows/sales_daily_import.yml/dispatches"
+    payload = json.dumps({
+        "ref": "main",
+        "inputs": {
+            "store_report_date": "",
+            "backfill_start_month": start_date.strftime("%Y%m"),
+            "backfill_end_month": end_date.strftime("%Y%m"),
+        },
+    }).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=payload,
+        method="POST",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "Content-Type": "application/json",
+            "User-Agent": "Yogibo-sales-dashboard",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            if response.status != 204:
+                raise RuntimeError(f"取得処理の開始に失敗しました（HTTP {response.status}）")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"取得処理の開始に失敗しました（HTTP {exc.code}）：{detail}") from exc
+
+
 elif st.session_state.get('current_page', 'summary') == 'history':
     st.subheader("🗓️ 期間分析")
     hist = _sales_history.copy()
@@ -2328,15 +2370,26 @@ elif st.session_state.get('current_page', 'summary') == 'history':
 
     hist["日付"] = pd.to_datetime(hist["日付"])
     hist["会計年度"] = hist["日付"].apply(lambda d: d.year if d.month >= 3 else d.year - 1)
-    fiscal_years = sorted(hist["会計年度"].unique().tolist(), reverse=True)
+    import datetime as _dt_history
+    _current_fy = _dt_history.date.today().year if _dt_history.date.today().month >= 3 else _dt_history.date.today().year - 1
+    fiscal_years = sorted(
+        set(hist["会計年度"].unique().tolist()) | set(range(_current_fy - 4, _current_fy + 1)),
+        reverse=True,
+    )
 
     pc1, pc2, pc3 = st.columns([1, 1, 1])
     with pc1:
         fiscal_year = st.selectbox("年度（3月始まり）", fiscal_years, key="hist_fy")
     with pc2:
-        period_kind = st.selectbox("集計単位", ["四半期", "半期", "年度"], key="hist_kind")
+        period_kind = st.selectbox("集計単位", ["月", "四半期", "半期", "年度"], key="hist_kind")
     with pc3:
-        if period_kind == "四半期":
+        if period_kind == "月":
+            _month_options = ["3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月", "1月", "2月"]
+            _latest_date_for_fy = hist[hist["会計年度"] == fiscal_year]["日付"].max()
+            _default_month = f"{_latest_date_for_fy.month}月" if pd.notna(_latest_date_for_fy) else f"{_dt_history.date.today().month}月"
+            _month_index = _month_options.index(_default_month) if _default_month in _month_options else 0
+            period_value = st.selectbox("期間", _month_options, index=_month_index, key="hist_month")
+        elif period_kind == "四半期":
             _latest_month = hist[hist["会計年度"] == fiscal_year]["日付"].max().month
             _q_default = 0 if 3 <= _latest_month <= 5 else (1 if 6 <= _latest_month <= 8 else (2 if 9 <= _latest_month <= 11 else 3))
             period_value = st.selectbox("期間", ["Q1", "Q2", "Q3", "Q4"], index=_q_default, key="hist_q")
@@ -2348,6 +2401,30 @@ elif st.session_state.get('current_page', 'summary') == 'history':
             period_value = None
 
     start_date, end_date = fiscal_period_range(int(fiscal_year), period_kind, period_value)
+
+    fetch_col, refresh_col, note_col = st.columns([1.4, 1.2, 4])
+    with fetch_col:
+        if st.button("⬇️ 選択期間のデータを取得", type="primary", use_container_width=True, key="history_fetch"):
+            with st.spinner("取得処理を開始しています..."):
+                try:
+                    _trigger_sales_backfill(start_date, end_date)
+                    st.session_state["_history_fetch_started"] = (
+                        f"{start_date:%Y/%m/%d}〜{end_date:%Y/%m/%d}の取得を開始しました。"
+                        "通常は数分かかります。完了後に「取得結果を再読込」を押してください。"
+                    )
+                except Exception as exc:
+                    st.error(str(exc))
+    with refresh_col:
+        if st.button("🔄 取得結果を再読込", use_container_width=True, key="history_reload"):
+            _load_sales_history_from_db.clear()
+            st.session_state.pop("_sales_history", None)
+            st.session_state.pop("_history_fetch_started", None)
+            st.rerun()
+    with note_col:
+        st.caption("取得処理はバックグラウンドで実行されます。ボタンを何度押しても同じ日付・店舗・指標は重複しません。")
+    if st.session_state.get("_history_fetch_started"):
+        st.success(st.session_state["_history_fetch_started"])
+
     max_date = hist["日付"].max().date()
     actual_end = min(end_date, max_date)
     period_df = hist[(hist["日付"].dt.date >= start_date) & (hist["日付"].dt.date <= actual_end)].copy()
