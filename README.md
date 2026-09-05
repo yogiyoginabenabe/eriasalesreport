@@ -36,3 +36,13 @@ streamlit run app.py
 ## 対応CSVフォーマット
 - 文字コード: Shift-JIS（UTF-8も自動判定）
 - 列構成: 店舗ID, 店舗コード, 店舗名, 項目名, 日付列...
+
+
+## 日次自動取得
+
+- GitHub Actions「Yogibo store report daily import」が毎日22:30（日本時間）に動きます。
+- Yogibo店舗分析のCSV ver.3から、受注金額・座数・客数・CVR・客単価・品数を取得します。
+- 店舗マスタで `渡邊_A` / `渡邊_B` かつ `OPEN` の店舗だけを対象にします。
+- Google Sheets「売上管理DB」の `sales_history` へ、店舗・日付・指標をキーに追記／更新します。同じ日を再実行しても二重計上されません。
+- Actionsの手動実行では、`YYYYMMDD` 形式で過去日を再取得できます。
+- 必要なRepository secretsは `YOGIBO_STAFF_ID`、`YOGIBO_STAFF_PASSWORD`、`GCP_SERVICE_ACCOUNT_JSON` です。
