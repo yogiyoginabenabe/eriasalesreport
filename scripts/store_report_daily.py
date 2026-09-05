@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import sys
+import tomllib
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -34,7 +35,33 @@ def required_env(name: str) -> str:
 
 
 def google_client():
-    credentials = json.loads(required_env("GCP_SERVICE_ACCOUNT_JSON"))
+    raw = required_env("GCP_SERVICE_ACCOUNT_JSON").strip()
+    credentials = None
+
+    # GitHub Secretには、JSONファイルの中身とStreamlit用TOMLの
+    # どちらが貼られていても動くようにする。
+    try:
+        credentials = json.loads(raw)
+        if isinstance(credentials, str):
+            credentials = json.loads(credentials)
+    except (json.JSONDecodeError, TypeError):
+        try:
+            parsed = tomllib.loads(raw)
+            credentials = parsed.get("gcp_service_account", parsed)
+            if isinstance(credentials, str):
+                credentials = json.loads(credentials)
+        except (tomllib.TOMLDecodeError, json.JSONDecodeError, TypeError):
+            # `GCP_SERVICE_ACCOUNT_JSON = {JSON}` のような貼り方も救済する。
+            first_brace = raw.find("{")
+            last_brace = raw.rfind("}")
+            if first_brace >= 0 and last_brace > first_brace:
+                credentials = json.loads(raw[first_brace:last_brace + 1])
+
+    if not isinstance(credentials, dict) or not credentials.get("client_email"):
+        raise RuntimeError(
+            "GCP_SERVICE_ACCOUNT_JSONを解析できません。JSONファイルの中身、または"
+            "[gcp_service_account]で始まるStreamlit Secrets形式を設定してください"
+        )
     return gspread.service_account_from_dict(credentials)
 
 
