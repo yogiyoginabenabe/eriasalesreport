@@ -730,6 +730,31 @@ CSV_PREV  = "sales_prev.csv"
 CSV_TSALES = "target_sales.csv"
 CSV_TZASU  = "target_zasu.csv"
 
+GOOGLE_SHEET_ID = "1v5-TXMQ1bvoyBFq9m7jdf66TVKhZMm_griDFY3Z2VDs"
+
+@st.cache_data(ttl=900, show_spinner=False)
+def load_google_sheet_csv(worksheet_name):
+    """Streamlit Secretsのサービスアカウントで目標シートをCSV相当として取得。"""
+    import io
+    try:
+        import gspread
+        credentials = dict(st.secrets["gcp_service_account"])
+        client = gspread.service_account_from_dict(credentials)
+        worksheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet(worksheet_name)
+        rows = worksheet.get_all_values()
+        if not rows:
+            return None
+        csv_bytes = pd.DataFrame(rows).to_csv(
+            index=False, header=False, lineterminator="\n"
+        ).encode("utf-8")
+        buf = io.BytesIO(csv_bytes)
+        buf.name = f"{worksheet_name}.csv"
+        return buf
+    except Exception as exc:
+        st.session_state["_google_sheet_error"] = str(exc)
+        return None
+
+
 def file_to_uploadedfile(path):
     """ローカルファイルをfile_uploaderと同じように扱えるオブジェクトに変換"""
     import io
@@ -806,6 +831,12 @@ uploaded_now          = uploaded_now_raw          or file_to_uploadedfile(CSV_NO
 uploaded_prev         = uploaded_prev_raw         or file_to_uploadedfile(CSV_PREV)
 uploaded_target_sales = uploaded_target_sales_raw or file_to_uploadedfile(CSV_TSALES)
 uploaded_target_zasu  = uploaded_target_zasu_raw  or file_to_uploadedfile(CSV_TZASU)
+
+# 目標CSVがない場合はGoogleスプレッドシートから自動取得
+if uploaded_target_sales is None:
+    uploaded_target_sales = load_google_sheet_csv("Target_Sales")
+if uploaded_target_zasu is None:
+    uploaded_target_zasu = load_google_sheet_csv("Target_Zasu")
 
 # ─────────────────────────────────────────────
 # ① CSVバイト列をsession_stateにキャッシュ
