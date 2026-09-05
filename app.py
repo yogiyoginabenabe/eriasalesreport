@@ -299,9 +299,8 @@ STORE_DATA_SHEET_ID = "1eNpYmFkubjtFEwKgnpzFp2DUGoMBYJklDCy1gGOa5Rw"
 STORE_DATA_TAB = "店舗データ"
 STORE_AM_NAMES = {"渡邊_A", "渡邊_B"}
 
-@st.cache_data(ttl=900, show_spinner=False)
 def load_master():
-    """店舗データから渡邊_A/BかつOPENの店舗を自動取得する。"""
+    """店舗データから渡邊_A/BかつOPENの店舗を取得する。"""
     try:
         import gspread
         client = gspread.service_account_from_dict(dict(st.secrets["gcp_service_account"]))
@@ -758,8 +757,9 @@ if st.session_state.get('_targets_index_hash') != _targets_hash:
 # ─────────────────────────────────────────────
 # セッション初期化
 # ─────────────────────────────────────────────
-# 15分キャッシュで店舗データを自動同期
-st.session_state.stores = load_master()
+# 店舗マスタはセッション開始時に1回だけ取得し、以降はボタン操作で更新
+if "stores" not in st.session_state:
+    st.session_state.stores = load_master()
 if "targets" not in st.session_state:
     st.session_state.targets = load_targets()
 
@@ -2676,7 +2676,18 @@ elif st.session_state.get('current_page', 'summary') == 'target':
 # ══════════════════════════════════════════════
 elif st.session_state.get('current_page', 'summary') == 'master':
     st.subheader("🏪 店舗マスタ編集")
-    st.info("店舗マスタはGoogleスプレッドシート「店舗データ」から15分ごとに自動同期します。対象は渡邊_A／渡邊_BかつOPENの店舗です。")
+    st.info("店舗マスタは必要な時だけGoogleスプレッドシート「店舗データ」から更新します。対象は渡邊_A／渡邊_BかつOPENの店舗です。")
+
+    if st.button("🔄 最新情報を取得", type="primary", key="refresh_store_master"):
+        st.session_state.pop("_store_master_error", None)
+        with st.spinner("店舗マスタの最新情報を取得しています..."):
+            refreshed_stores = load_master()
+        if st.session_state.get("_store_master_error"):
+            st.error("最新情報を取得できませんでした。現在の店舗一覧をそのまま表示します。")
+        else:
+            st.session_state.stores = refreshed_stores
+            st.success(f"最新情報を取得しました（{len(refreshed_stores)}店舗）")
+
     stores = st.session_state.stores
 
     # ── 店舗データCSVから一括追加 ──
