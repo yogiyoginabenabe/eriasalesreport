@@ -2323,44 +2323,43 @@ elif st.session_state.get('current_page', 'summary') == 'detail':
 # ══════════════════════════════════════════════
 # 履歴期間分析（月・四半期・半期・年度）
 # ══════════════════════════════════════════════
-def _trigger_sales_backfill(start_date, end_date):
-    """画面からGitHub Actionsの過去取得処理を開始する。認証情報はGitHub側だけで使用する。"""
-    import urllib.error
-    import urllib.request
-    token = str(st.secrets.get("GITHUB_ACTIONS_TOKEN", "")).strip()
-    if not token:
-        raise RuntimeError("Streamlit Secretsに GITHUB_ACTIONS_TOKEN が設定されていません")
-    url = "https://api.github.com/repos/yogiyoginabenabe/eriasalesreport/actions/workflows/sales_daily_import.yml/dispatches"
-    payload = json.dumps({
-        "ref": "main",
-        "inputs": {
-            "store_report_date": "",
-            "backfill_start_month": start_date.strftime("%Y%m"),
-            "backfill_end_month": end_date.strftime("%Y%m"),
-        },
-    }).encode("utf-8")
-    request = urllib.request.Request(
-        url,
-        data=payload,
-        method="POST",
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "Content-Type": "application/json",
-            "User-Agent": "Yogibo-sales-dashboard",
-        },
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=20) as response:
-            if response.status != 204:
-                raise RuntimeError(f"取得処理の開始に失敗しました（HTTP {response.status}）")
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"取得処理の開始に失敗しました（HTTP {exc.code}）：{detail}") from exc
-
-
 elif st.session_state.get('current_page', 'summary') == 'history':
+    def _trigger_sales_backfill(start_date, end_date):
+        """画面からGitHub Actionsの過去取得処理を開始する。認証情報はGitHub側だけで使用する。"""
+        import urllib.error
+        import urllib.request
+        token = str(st.secrets.get("GITHUB_ACTIONS_TOKEN", "")).strip()
+        if not token:
+            raise RuntimeError("Streamlit Secretsに GITHUB_ACTIONS_TOKEN が設定されていません")
+        url = "https://api.github.com/repos/yogiyoginabenabe/eriasalesreport/actions/workflows/sales_daily_import.yml/dispatches"
+        payload = json.dumps({
+            "ref": "main",
+            "inputs": {
+                "store_report_date": "",
+                "backfill_start_month": start_date.strftime("%Y%m"),
+                "backfill_end_month": end_date.strftime("%Y%m"),
+            },
+        }).encode("utf-8")
+        request = urllib.request.Request(
+            url,
+            data=payload,
+            method="POST",
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token}",
+                "X-GitHub-Api-Version": "2022-11-28",
+                "Content-Type": "application/json",
+                "User-Agent": "Yogibo-sales-dashboard",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                if response.status != 204:
+                    raise RuntimeError(f"取得処理の開始に失敗しました（HTTP {response.status}）")
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"取得処理の開始に失敗しました（HTTP {exc.code}）：{detail}") from exc
+
     st.subheader("🗓️ 期間分析")
     hist = _sales_history.copy()
     tgt_hist = _target_history.copy()
