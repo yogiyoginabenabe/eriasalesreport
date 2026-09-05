@@ -2643,14 +2643,32 @@ elif st.session_state.get('current_page', 'summary') == 'report':
 {report_sources.to_csv(index=False)}
 """
                 try:
+                    import time
                     from google import genai
                     client = genai.Client(api_key=gemini_api_key)
-                    response = client.models.generate_content(model="gemini-3.8-flash", contents=prompt)
-                    generated_text = (response.text or "").strip()
+                    generated_text = ""
+                    used_model = ""
+                    last_error = None
+                    # 混雑時は安定版・軽量版へ自動的に切り替える
+                    for model_name in ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite"]:
+                        try:
+                            response = client.models.generate_content(model=model_name, contents=prompt)
+                            generated_text = (response.text or "").strip()
+                            if generated_text:
+                                used_model = model_name
+                                break
+                            last_error = ValueError("AIから文章が返されませんでした。")
+                        except Exception as model_error:
+                            last_error = model_error
+                            error_text = str(model_error)
+                            if any(code in error_text for code in ["503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED"]):
+                                time.sleep(1)
+                                continue
+                            raise
                     if not generated_text:
-                        raise ValueError("AIから文章が返されませんでした。")
+                        raise last_error or ValueError("AIから文章が返されませんでした。")
                     st.session_state["_generated_tunag"] = {"key": generation_key, "text": generated_text}
-                    st.success("日報と売上サマリーに基づいてレポートを生成しました。")
+                    st.success(f"日報と売上サマリーに基づいてレポートを生成しました（{used_model}）。")
                 except Exception as exc:
                     st.error(f"AIレポートを生成できませんでした：{exc}")
         else:
