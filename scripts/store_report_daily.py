@@ -1,20 +1,29 @@
-"""Yogibo店舗分析CSVを取得し、Google Sheetsの売上管理DBへ保存する。"""
+"""店舗分析CSVを日次取得し、売上管理DBへ重複なく保存する。"""
 
 import argparse
-import csv
-import io
 import json
 import os
-import re
-from datetime import date, timedelta
+import sys
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import gspread
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import sync_playwright
 
-LOGIN_URL = "https://staff.yogibo.jp/manage/"
-REPORT_URL = "https://staff.yogibo.jp/manage/report/shop_report_analyze2.php"
-DB_SHEET_ID = "1yJdfZj-zq9ilbe7e2h4kDllhH-e092hWAps6uJgf2CU"
+import report_missing_check as report_api
+
+SALES_DB_SHEET_ID = "1yJdfZj-zq9ilbe7e2h4kDllhH-e092hWAps6uJgf2CU"
+STORE_MASTER_SHEET_ID = "1eNpYmFkubjtFEwKgnpzFp2DUGoMBYJklDCy1gGOa5Rw"
+STORE_MASTER_TAB = "店舗データ"
+HISTORY_TAB = "sales_history"
+HISTORY_COLUMNS = ["店舗名", "店舗コード", "代行会社", "エリア", "日付", "指標", "値"]
+METRICS = ["受注金額(税抜)", "座数", "客数", "CVR", "客単価", "品数"]
+TARGET_AMS = {"渡邊_A", "渡邊_B"}
+
+
+def log(message: str) -> None:
+    print(f"[{datetime.now(ZoneInfo('Asia/Tokyo')):%Y-%m-%d %H:%M:%S}] {message}", flush=True)
 
 
 def required_env(name: str) -> str:
@@ -24,135 +33,128 @@ def required_env(name: str) -> str:
     return value
 
 
-def fill_first_visible(page, selectors, value):
-    for selector in selectors:
-        locator = page.locator(selector)
-        for index in range(locator.count()):
-            item = locator.nth(index)
-            if item.is_visible():
-                item.fill(value)
-                return
-    raise RuntimeError(f"入力欄が見つかりません: {selectors}")
+def google_client():
+    credentials = json.loads(required_env("GCP_SERVICE_ACCOUNT_JSON"))
+    return gspread.service_account_from_dict(credentials)
 
 
-def login(page):
-    page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=60_000)
-    fill_first_visible(
-        page,
-        [
-            'input[name="login_id"]', 'input[name="user_id"]',
-            'input[name="username"]', 'input[type="email"]',
-            'input[type="text"]',
-        ],
-        required_env("YOGIBO_STAFF_ID"),
-    )
-    fill_first_visible(
-        page,
-        ['input[name="password"]', 'input[type="password"]'],
-        required_env("YOGIBO_STAFF_PASSWORD"),
-    )
-    submit = page.locator('button[type="submit"], input[type="submit"]')
-    if submit.count() == 0:
-        raise RuntimeError("ログインボタンが見つかりません")
-    submit.first.click()
-    page.wait_for_load_state("domcontentloaded", timeout=60_000)
-    if page.locator('input[type="password"]').count() and page.locator('input[type="password"]').first.is_visible():
-        raise RuntimeError("ログインできませんでした。ID・パスワードまたは追加認証を確認してください")
+def load_target_stores(client) -> dict[str, dict[str, str]]:
+    """店舗コードをキーに、渡邊_A/BかつOPENの店舗情報を返す。"""
+    values = client.open_by_key(STORE_MASTER_SHEET_ID).worksheet(STORE_MASTER_TAB).get_all_values()
+    stores = {}
+    for source in values[1:]:
+        row = list(source) + [""] * max(0, 9 - len(source))
+        code, name = row[0].strip(), row[2].strip()
+        am_name, agency = row[4].strip(), row[6].strip()
+        status, area = row[7].strip().upper(), row[8].strip()
+        if code and name and am_name in TARGET_AMS and status == "OPEN":
+            stores[code] = {"店舗名": name, "代行会社": agency, "エリア": area}
+    if not stores:
+        raise RuntimeError("店舗マスタに『渡邊_A/B かつ OPEN』の店舗が見つかりません")
+    return stores
 
 
-def set_date_range(page, start: date, end: date):
-    candidates = []
-    inputs = page.locator("input")
-    for index in range(inputs.count()):
-        item = inputs.nth(index)
-        if not item.is_visible():
-            continue
-        value = item.input_value()
-        name = (item.get_attribute("name") or "") + (item.get_attribute("id") or "")
-        if re.fullmatch(r"\d{8}", value or "") or re.search(r"date|start|end|from|to|期間", name, re.I):
-            candidates.append(item)
-    if len(candidates) < 2:
-        raise RuntimeError("期間入力欄を2つ特定できませんでした")
-    candidates[0].fill(start.strftime("%Y%m%d"))
-    candidates[1].fill(end.strftime("%Y%m%d"))
+def numeric_value(value: str) -> float:
+    cleaned = str(value or "").strip().replace(",", "").replace("%", "")
+    cleaned = cleaned.replace("¥", "").replace("￥", "")
+    if cleaned in {"", "-", "—"}:
+        return 0.0
+    return float(cleaned)
 
 
-def select_daily_format(page):
-    selects = page.locator("select")
-    for index in range(selects.count()):
-        select = selects.nth(index)
-        if not select.is_visible():
-            continue
-        labels = select.locator("option").all_text_contents()
-        for label in labels:
-            if "日別" in label:
-                select.select_option(label=label)
-                return
-    raise RuntimeError("表示形式「日別」が見つかりませんでした")
-
-
-def download_csv(page, start: date, end: date, output: Path):
-    page.goto(REPORT_URL, wait_until="domcontentloaded", timeout=60_000)
-    set_date_range(page, start, end)
-    select_daily_format(page)
-    page.wait_for_timeout(1_000)
-
-    csv_link = page.get_by_text("CSV詳細", exact=True)
-    if csv_link.count() == 0:
-        raise RuntimeError("「CSV詳細」が見つかりませんでした")
-    with page.expect_download(timeout=60_000) as event:
-        csv_link.first.click()
-    event.value.save_as(output)
-    if output.stat().st_size == 0:
-        raise RuntimeError("ダウンロードされたCSVが空です")
-
-
-def decode_csv(raw: bytes):
-    for encoding in ("utf-8-sig", "cp932", "utf-8"):
+def normalize_date(value: str, fallback_ymd: str) -> str:
+    raw = str(value or "").strip()
+    for fmt in ("%Y/%m/%d", "%Y-%m-%d", "%Y%m%d"):
         try:
-            return list(csv.reader(io.StringIO(raw.decode(encoding))))
-        except UnicodeDecodeError:
+            return datetime.strptime(raw, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    return datetime.strptime(fallback_ymd, "%Y%m%d").strftime("%Y-%m-%d")
+
+
+def to_history_rows(csv_rows, target_stores, fallback_ymd):
+    result = []
+    skipped = set()
+    for csv_row in csv_rows:
+        code = str(csv_row.get("店舗コード", "")).strip()
+        if code not in target_stores:
+            if code and code != "-":
+                skipped.add(code)
             continue
-    raise RuntimeError("CSVの文字コードを判定できませんでした")
+        master = target_stores[code]
+        report_date = normalize_date(csv_row.get("日付", ""), fallback_ymd)
+        for metric in METRICS:
+            result.append([
+                master["店舗名"], code, master["代行会社"], master["エリア"],
+                report_date, metric, numeric_value(csv_row.get(metric, "")),
+            ])
+    if not result:
+        raise RuntimeError("取得CSVに担当店舗のデータがありません")
+    log(f"担当外として除外した店舗コード数: {len(skipped)}")
+    return result
 
 
-def save_sheet_tab(client, tab_name: str, csv_path: Path):
-    book = client.open_by_key(DB_SHEET_ID)
-    values = decode_csv(csv_path.read_bytes())
+def upsert_history(client, incoming_rows) -> tuple[int, int]:
+    book = client.open_by_key(SALES_DB_SHEET_ID)
     try:
-        sheet = book.worksheet(tab_name)
+        sheet = book.worksheet(HISTORY_TAB)
     except gspread.WorksheetNotFound:
-        sheet = book.add_worksheet(
-            title=tab_name,
-            rows=max(len(values) + 10, 1000),
-            cols=max(max(len(row) for row in values), 30),
-        )
-    sheet.clear()
-    sheet.update(range_name="A1", values=values)
+        sheet = book.add_worksheet(title=HISTORY_TAB, rows=1000, cols=len(HISTORY_COLUMNS))
+
+    values = sheet.get_all_values()
+    if not values or values[0] != HISTORY_COLUMNS:
+        sheet.clear()
+        sheet.update(range_name="A1", values=[HISTORY_COLUMNS])
+        values = [HISTORY_COLUMNS]
+
+    # 既存行番号を索引化し、再実行時は該当6行だけ更新する。
+    # 全履歴のclear→再書き込みを避けるため、データが年単位で増えても安全。
+    row_numbers = {}
+    for sheet_row_number, row in enumerate(values[1:], start=2):
+        padded = (list(row) + [""] * len(HISTORY_COLUMNS))[:len(HISTORY_COLUMNS)]
+        key = (padded[1], padded[0], padded[4], padded[5])
+        row_numbers[key] = sheet_row_number
+
+    updates = []
+    additions = []
+    for row in incoming_rows:
+        text_row = [str(value) for value in row]
+        key = (text_row[1], text_row[0], text_row[4], text_row[5])
+        if key in row_numbers:
+            row_number = row_numbers[key]
+            updates.append({"range": f"A{row_number}:G{row_number}", "values": [text_row]})
+        else:
+            additions.append(text_row)
+
+    if updates:
+        sheet.batch_update(updates)
+    if additions:
+        sheet.append_rows(additions, value_input_option="RAW")
+    return len(additions), len(updates)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--end", help="今年CSVの最終日 YYYY-MM-DD。省略時は昨日")
+    parser.add_argument("--date", help="対象日 YYYYMMDD。省略時は日本時間の当日")
     parser.add_argument("--debug-dir", default="debug")
     args = parser.parse_args()
 
-    end = date.fromisoformat(args.end) if args.end else date.today() - timedelta(days=1)
-    start = end.replace(day=1)
-    prev_start = start - timedelta(weeks=52)
-    prev_end = end - timedelta(weeks=52)
+    ymd = args.date or datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y%m%d")
+    datetime.strptime(ymd, "%Y%m%d")
+    required_env("YOGIBO_STAFF_ID")
+    required_env("YOGIBO_STAFF_PASSWORD")
     debug_dir = Path(args.debug_dir)
     debug_dir.mkdir(parents=True, exist_ok=True)
-    now_csv = debug_dir / "sales_now.csv"
-    prev_csv = debug_dir / "sales_prev.csv"
+    log(f"取得対象日: {ymd}")
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
-        page = browser.new_page(accept_downloads=True, locale="ja-JP", timezone_id="Asia/Tokyo")
+        context = browser.new_context(locale="ja-JP", timezone_id="Asia/Tokyo")
+        page = context.new_page()
         try:
-            login(page)
-            download_csv(page, start, end, now_csv)
-            download_csv(page, prev_start, prev_end, prev_csv)
+            report_api.login(page)
+            raw = report_api.fetch_report_csv(page, ymd)
+            (debug_dir / f"store-report-{ymd}.csv").write_bytes(raw)
         except Exception:
             page.screenshot(path=str(debug_dir / "failure.png"), full_page=True)
             (debug_dir / "failure_url.txt").write_text(page.url, encoding="utf-8")
@@ -160,12 +162,22 @@ def main():
         finally:
             browser.close()
 
-    credentials = json.loads(required_env("GCP_SERVICE_ACCOUNT_JSON"))
-    client = gspread.service_account_from_dict(credentials)
-    save_sheet_tab(client, "sales_now_raw", now_csv)
-    save_sheet_tab(client, "sales_prev_raw", prev_csv)
-    print(f"保存完了: 今年 {start}〜{end} / 前年 {prev_start}〜{prev_end}")
+    try:
+        csv_rows = report_api.parse_report_csv(raw)
+    except report_api.NoDataYetError as exc:
+        log(f"未確定データ: {exc}")
+        return
+
+    client = google_client()
+    target_stores = load_target_stores(client)
+    history_rows = to_history_rows(csv_rows, target_stores, ymd)
+    inserted, updated = upsert_history(client, history_rows)
+    log(f"保存完了: 対象店舗 {len(history_rows) // len(METRICS)}店 / 新規 {inserted}行 / 更新 {updated}行")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        log(f"エラー: {exc}")
+        sys.exit(1)
