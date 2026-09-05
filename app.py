@@ -537,6 +537,20 @@ def _load_sales_history_from_db():
     """Google Sheets全件取得を5分キャッシュし、画面操作ごとの通信を防ぐ。"""
     return _db_worksheet("sales_history").get_all_values()
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_summary_cache_from_db():
+    """週別・月別の高速サマリーを5分キャッシュする。"""
+    columns = ["集計単位", "開始日", "終了日", "店舗名", "店舗コード", "代行会社", "エリア", "指標", "値"]
+    try:
+        values = _db_worksheet("sales_summary_cache").get_all_values()
+    except Exception:
+        return pd.DataFrame(columns=columns)
+    if not values or len(values) < 2 or values[0] != columns:
+        return pd.DataFrame(columns=columns)
+    df = pd.DataFrame(values[1:], columns=columns)
+    df["値"] = pd.to_numeric(df["値"], errors="coerce")
+    return df.dropna(subset=["指標", "値"])
+
 def load_history(path):
     # 実績履歴はGoogle Sheetsを正本として読み込む
     if path == HISTORY_SALES_FILE:
@@ -1120,22 +1134,30 @@ elif _page == 'master': _active_tab = tab_master
 else: _active_tab = tab_overview
 
 
-def _trigger_sales_backfill(start_date, end_date):
-    """画面からGitHub Actionsの過去取得処理を開始する。認証情報はGitHub側だけで使用する。"""
+def _trigger_sales_backfill(start_date, end_date, summary_period=None):
+    """画面からGitHub Actionsの取得処理を開始する。認証情報はGitHub側だけで使用する。"""
     import urllib.error
     import urllib.request
     token = str(st.secrets.get("GITHUB_ACTIONS_TOKEN", "")).strip()
     if not token:
         raise RuntimeError("Streamlit Secretsに GITHUB_ACTIONS_TOKEN が設定されていません")
     url = "https://api.github.com/repos/yogiyoginabenabe/eriasalesreport/actions/workflows/sales_daily_import.yml/dispatches"
-    payload = json.dumps({
-        "ref": "main",
-        "inputs": {
-            "store_report_date": "",
+    inputs = {
+        "store_report_date": "", "backfill_start_month": "", "backfill_end_month": "",
+        "summary_start": "", "summary_end": "", "summary_period": "",
+    }
+    if summary_period:
+        inputs.update({
+            "summary_start": start_date.strftime("%Y%m%d"),
+            "summary_end": end_date.strftime("%Y%m%d"),
+            "summary_period": summary_period,
+        })
+    else:
+        inputs.update({
             "backfill_start_month": start_date.strftime("%Y%m"),
             "backfill_end_month": end_date.strftime("%Y%m"),
-        },
-    }).encode("utf-8")
+        })
+    payload = json.dumps({"ref": "main", "inputs": inputs}).encode("utf-8")
     request = urllib.request.Request(
         url,
         data=payload,
@@ -1507,14 +1529,19 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
     
         _summary_month_start = datetime.date(sel_year, sel_month_num, 1)
         _summary_month_end = datetime.date(sel_year, sel_month_num, cal_mod.monthrange(sel_year, sel_month_num)[1])
+        if sel_week_range is None:
+            _summary_request_start, _summary_request_end, _summary_period_code = _summary_month_start, _summary_month_end, "m"
+        else:
+            _summary_request_start, _summary_request_end = sel_week_range
+            _summary_period_code = "w"
         fetch_col, refresh_col, note_col = st.columns([1.4, 1.2, 4])
         with fetch_col:
             if st.button("⬇️ 選択月のデータを取得", type="primary", use_container_width=True, key="summary_fetch"):
                 with st.spinner("取得処理を開始しています..."):
                     try:
-                        _trigger_sales_backfill(_summary_month_start, _summary_month_end)
+                        _trigger_sales_backfill(_summary_request_start, _summary_request_end, _summary_period_code)
                         st.session_state["_summary_fetch_started"] = (
-                            f"{sel_year}年{sel_month_num}月の取得を開始しました。"
+                            f"{_summary_request_start:%Y/%m/%d}〜{_summary_request_end:%Y/%m/%d}の高速取得を開始しました。"
                             "通常は数分かかります。完了後に「取得結果を再読込」を押してください。"
                         )
                     except Exception as exc:
@@ -1522,6 +1549,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
         with refresh_col:
             if st.button("🔄 取得結果を再読込", use_container_width=True, key="summary_reload"):
                 _load_sales_history_from_db.clear()
+                _load_summary_cache_from_db.clear()
                 st.session_state.pop("_sales_history", None)
                 st.session_state.pop("_summary_fetch_started", None)
                 st.rerun()
@@ -1543,10 +1571,37 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                 if s_dt <= pd.to_datetime(d).date() <= e_dt
             ]
     
-        if not date_filter:
-            st.warning("選択期間のデータがCSVに含まれていません。")
+        _summary_cache_all = _load_summary_cache_from_db()
+        _req_start_iso = _summary_request_start.strftime("%Y-%m-%d")
+        _req_end_iso = _summary_request_end.strftime("%Y-%m-%d")
+        _summary_cache_now = _summary_cache_all[
+            (_summary_cache_all["集計単位"] == _summary_period_code) &
+            (_summary_cache_all["開始日"] == _req_start_iso) &
+            (_summary_cache_all["終了日"] == _req_end_iso)
+        ].copy() if not _summary_cache_all.empty else pd.DataFrame()
+
+        if _summary_period_code == "w":
+            _prev_req_start = _summary_request_start - datetime.timedelta(weeks=52)
+            _prev_req_end = _summary_request_end - datetime.timedelta(weeks=52)
+        else:
+            try:
+                _prev_req_start = _summary_request_start.replace(year=_summary_request_start.year - 1)
+                _prev_req_end = _summary_request_end.replace(year=_summary_request_end.year - 1)
+            except ValueError:
+                _prev_req_start = _summary_request_start.replace(year=_summary_request_start.year - 1, day=28)
+                _prev_req_end = _summary_request_end.replace(year=_summary_request_end.year - 1, day=28)
+        _summary_cache_prev = _summary_cache_all[
+            (_summary_cache_all["集計単位"] == _summary_period_code) &
+            (_summary_cache_all["開始日"] == _prev_req_start.strftime("%Y-%m-%d")) &
+            (_summary_cache_all["終了日"] == _prev_req_end.strftime("%Y-%m-%d"))
+        ].copy() if not _summary_cache_all.empty else pd.DataFrame()
+
+        if not date_filter and _summary_cache_now.empty:
+            st.warning("選択期間のデータがまだありません。「データを取得」を押してください。")
             st.stop()
-    
+        if not date_filter:
+            date_filter = [_summary_request_start.strftime("%Y/%m/%d"), _summary_request_end.strftime("%Y/%m/%d")]
+
         period_ov_label = f"{date_filter[0]}（{sel_week_label}）" if sel_week_range else f"{date_filter[0]} 〜 {date_filter[-1]}"
         st.caption(f"📅 集計期間: {date_filter[0]} 〜 {date_filter[-1]}　｜　対象店舗: {len(selected_stores)} 店")
         st.divider()
@@ -1649,6 +1704,19 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                 _ov_prev_days = {prev_md for now_md, prev_md in _ov_reverse_map.items() if now_md in _ov_now_days}
                 ov_long_prev = _long_prev_cached[_long_prev_cached["月日"].isin(_ov_prev_days)] if _ov_prev_days else pd.DataFrame()
     
+        # 月別・週別キャッシュがあれば日別履歴より優先する。
+        def _summary_cache_to_long(df):
+            if df is None or df.empty:
+                return pd.DataFrame()
+            out = df[["店舗名", "店舗コード", "代行会社", "エリア", "指標", "値"]].copy()
+            out["月日"] = _summary_request_end.strftime("%m/%d")
+            out["年度"] = "集計"
+            return out
+        if not _summary_cache_now.empty:
+            ov_long_now = _summary_cache_to_long(_summary_cache_now)
+            ov_long_prev = _summary_cache_to_long(_summary_cache_prev)
+            ov_has_prev = not ov_long_prev.empty
+
         # 目標：期間内の日別目標を合計
         # 目標DataFrameをキャッシュ（get_store_target_period内で毎回CSV読むのを防ぐ）
         import io as _io_tgt2
