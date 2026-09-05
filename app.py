@@ -532,11 +532,16 @@ HISTORY_COLUMNS = ["店舗名", "店舗コード", "代行会社", "エリア", 
 def _empty_history():
     return pd.DataFrame(columns=HISTORY_COLUMNS)
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_sales_history_from_db():
+    """Google Sheets全件取得を5分キャッシュし、画面操作ごとの通信を防ぐ。"""
+    return _db_worksheet("sales_history").get_all_values()
+
 def load_history(path):
     # 実績履歴はGoogle Sheetsを正本として読み込む
     if path == HISTORY_SALES_FILE:
         try:
-            values = _db_worksheet("sales_history").get_all_values()
+            values = _load_sales_history_from_db()
             if values and len(values) > 1:
                 df = pd.DataFrame(values[1:], columns=values[0])
                 df["日付"] = pd.to_datetime(df["日付"], errors="coerce")
@@ -571,6 +576,7 @@ def save_history(df, path):
             )
             ws.clear()
             ws.update(range_name="A1", values=values)
+            _load_sales_history_from_db.clear()
         except Exception as exc:
             st.session_state["_sales_db_error"] = str(exc)
 
@@ -1057,8 +1063,17 @@ if st.session_state.get('_history_import_key') != _history_key:
     st.session_state['_sales_history'] = _sales_history
     st.session_state['_target_history'] = _target_history
 else:
-    _sales_history = st.session_state.get('_sales_history', load_history(HISTORY_SALES_FILE))
-    _target_history = st.session_state.get('_target_history', load_history(HISTORY_TARGET_FILE))
+    # dict.getの既定値はキーが存在しても評価されるため、明示分岐して不要なDB読込を防ぐ。
+    if '_sales_history' in st.session_state:
+        _sales_history = st.session_state['_sales_history']
+    else:
+        _sales_history = load_history(HISTORY_SALES_FILE)
+        st.session_state['_sales_history'] = _sales_history
+    if '_target_history' in st.session_state:
+        _target_history = st.session_state['_target_history']
+    else:
+        _target_history = load_history(HISTORY_TARGET_FILE)
+        st.session_state['_target_history'] = _target_history
 
 # ─────────────────────────────────────────────
 # ③ 目標CSV読み込みをここで1回だけ実行（重複排除）
