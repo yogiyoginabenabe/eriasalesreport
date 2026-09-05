@@ -6,7 +6,17 @@ on:
   workflow_dispatch:
     inputs:
       store_report_date:
-        description: "再取得する日（YYYYMMDD、空欄なら日本時間の当日）"
+        description: "1日だけ再取得（YYYYMMDD）。過去一括取得時は空欄"
+        required: false
+        default: ""
+        type: string
+      backfill_start_month:
+        description: "過去一括取得の開始月（YYYYMM、例: 202503）"
+        required: false
+        default: ""
+        type: string
+      backfill_end_month:
+        description: "過去一括取得の終了月（YYYYMM、例: 202609）"
         required: false
         default: ""
         type: string
@@ -21,7 +31,7 @@ concurrency:
 jobs:
   import-sales:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       TZ: Asia/Tokyo
       YOGIBO_STAFF_ID: ${{ secrets.YOGIBO_STAFF_ID }}
@@ -45,7 +55,15 @@ jobs:
       - name: Download and upsert daily sales
         shell: bash
         run: |
-          if [ -n "${{ inputs.store_report_date }}" ]; then
+          if [ -n "${{ inputs.backfill_start_month }}" ]; then
+            END_MONTH="${{ inputs.backfill_end_month }}"
+            if [ -z "$END_MONTH" ]; then
+              END_MONTH="${{ inputs.backfill_start_month }}"
+            fi
+            python scripts/store_report_daily.py \
+              --start-month "${{ inputs.backfill_start_month }}" \
+              --end-month "$END_MONTH"
+          elif [ -n "${{ inputs.store_report_date }}" ]; then
             python scripts/store_report_daily.py --date "${{ inputs.store_report_date }}"
           else
             python scripts/store_report_daily.py
