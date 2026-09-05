@@ -20,6 +20,21 @@ on:
         required: false
         default: ""
         type: string
+      summary_start:
+        description: "サイト高速サマリー開始日（YYYYMMDD）"
+        required: false
+        default: ""
+        type: string
+      summary_end:
+        description: "サイト高速サマリー終了日（YYYYMMDD）"
+        required: false
+        default: ""
+        type: string
+      summary_period:
+        description: "サイト高速サマリー形式（m=月別、w=週別）"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -55,7 +70,12 @@ jobs:
       - name: Download and upsert daily sales
         shell: bash
         run: |
-          if [ -n "${{ inputs.backfill_start_month }}" ]; then
+          if [ -n "${{ inputs.summary_start }}" ]; then
+            python scripts/store_report_daily.py \
+              --summary-start "${{ inputs.summary_start }}" \
+              --summary-end "${{ inputs.summary_end }}" \
+              --summary-period "${{ inputs.summary_period }}"
+          elif [ -n "${{ inputs.backfill_start_month }}" ]; then
             END_MONTH="${{ inputs.backfill_end_month }}"
             if [ -z "$END_MONTH" ]; then
               END_MONTH="${{ inputs.backfill_start_month }}"
