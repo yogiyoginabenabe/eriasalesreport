@@ -1534,11 +1534,16 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
         else:
             _summary_request_start, _summary_request_end = sel_week_range
             _summary_period_code = "w"
+        _summary_yesterday = datetime.date.today() - datetime.timedelta(days=1)
+        _summary_request_end = min(_summary_request_end, _summary_yesterday)
+        _summary_period_label = "月別" if _summary_period_code == "m" else "週別"
         fetch_col, refresh_col, note_col = st.columns([1.4, 1.2, 4])
         with fetch_col:
-            if st.button("⬇️ 選択月のデータを取得", type="primary", use_container_width=True, key="summary_fetch"):
+            if st.button(f"⬇️ {_summary_period_label}データを取得", type="primary", use_container_width=True, key="summary_fetch"):
                 with st.spinner("取得処理を開始しています..."):
                     try:
+                        if _summary_request_start > _summary_request_end:
+                            raise ValueError("未来の期間はまだ取得できません")
                         _trigger_sales_backfill(_summary_request_start, _summary_request_end, _summary_period_code)
                         st.session_state["_summary_fetch_started"] = (
                             f"{_summary_request_start:%Y/%m/%d}〜{_summary_request_end:%Y/%m/%d}の高速取得を開始しました。"
@@ -1554,7 +1559,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                 st.session_state.pop("_summary_fetch_started", None)
                 st.rerun()
         with note_col:
-            st.caption("週を選択している場合も、その週を含む月の日別データを取得します。再取得しても重複しません。")
+            st.caption("月間累計は月別CSV、W1などは週別CSVを使用します。再取得しても重複しません。")
         if st.session_state.get("_summary_fetch_started"):
             st.success(st.session_state["_summary_fetch_started"])
 
