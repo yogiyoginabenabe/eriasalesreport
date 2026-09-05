@@ -499,6 +499,17 @@ def _empty_history():
     return pd.DataFrame(columns=HISTORY_COLUMNS)
 
 def load_history(path):
+    # 実績履歴はGoogle Sheetsを正本として読み込む
+    if path == HISTORY_SALES_FILE:
+        try:
+            values = _db_worksheet("sales_history").get_all_values()
+            if values and len(values) > 1:
+                df = pd.DataFrame(values[1:], columns=values[0])
+                df["日付"] = pd.to_datetime(df["日付"], errors="coerce")
+                df["値"] = pd.to_numeric(df["値"], errors="coerce")
+                return df.dropna(subset=["日付", "指標", "値"])
+        except Exception as exc:
+            st.session_state["_sales_db_error"] = str(exc)
     if not os.path.exists(path):
         return _empty_history()
     try:
@@ -515,6 +526,19 @@ def save_history(df, path):
     out = df.copy()
     out["日付"] = pd.to_datetime(out["日付"], errors="coerce").dt.strftime("%Y-%m-%d")
     out.to_csv(path, index=False, encoding="utf-8-sig")
+    if path == HISTORY_SALES_FILE:
+        try:
+            clean = out[HISTORY_COLUMNS].fillna("")
+            values = [HISTORY_COLUMNS] + clean.astype(str).values.tolist()
+            ws = _db_worksheet(
+                "sales_history",
+                rows=max(len(values) + 10, 1000),
+                cols=len(HISTORY_COLUMNS),
+            )
+            ws.clear()
+            ws.update(range_name="A1", values=values)
+        except Exception as exc:
+            st.session_state["_sales_db_error"] = str(exc)
 
 def merge_history(existing, incoming, path):
     if incoming is None or incoming.empty:
@@ -755,6 +779,72 @@ def load_google_sheet_csv(worksheet_name):
         return None
 
 
+SALES_DB_SHEET_ID = "1yJdfZj-zq9ilbe7e2h4kDllhH-e092hWAps6uJgf2CU"
+
+@st.cache_resource(show_spinner=False)
+def get_google_client():
+    import gspread
+    return gspread.service_account_from_dict(dict(st.secrets["gcp_service_account"]))
+
+def _db_worksheet(tab_name, rows=1000, cols=30):
+    import gspread
+    book = get_google_client().open_by_key(SALES_DB_SHEET_ID)
+    try:
+        return book.worksheet(tab_name)
+    except gspread.WorksheetNotFound:
+        return book.add_worksheet(title=tab_name, rows=rows, cols=cols)
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_raw_csv_from_db(tab_name):
+    """売上管理DBに保存したCSVをfile_uploader互換のバッファで返す。"""
+    import io
+    try:
+        values = _db_worksheet(tab_name).get_all_values()
+        if not values:
+            return None
+        data = pd.DataFrame(values).to_csv(
+            index=False, header=False, lineterminator="\n"
+        ).encode("utf-8-sig")
+        buf = io.BytesIO(data)
+        buf.name = f"{tab_name}.csv"
+        return buf
+    except Exception as exc:
+        st.session_state["_sales_db_error"] = str(exc)
+        return None
+
+def save_raw_csv_to_db(tab_name, uploaded_file):
+    """アップロードされた元CSVをGoogle Sheetsへ保存する。"""
+    import csv
+    import io
+    if uploaded_file is None:
+        return
+    try:
+        uploaded_file.seek(0)
+        raw = uploaded_file.read()
+        uploaded_file.seek(0)
+        text_data = None
+        for encoding in ("utf-8-sig", "cp932", "utf-8"):
+            try:
+                text_data = raw.decode(encoding)
+                break
+            except UnicodeDecodeError:
+                continue
+        if text_data is None:
+            raise ValueError("CSVの文字コードを判定できませんでした")
+        values = list(csv.reader(io.StringIO(text_data)))
+        if not values:
+            return
+        ws = _db_worksheet(
+            tab_name,
+            rows=max(len(values) + 10, 1000),
+            cols=max(max(len(row) for row in values), 30),
+        )
+        ws.clear()
+        ws.update(range_name="A1", values=values)
+        load_raw_csv_from_db.clear()
+    except Exception as exc:
+        st.session_state["_sales_db_error"] = str(exc)
+
 def file_to_uploadedfile(path):
     """ローカルファイルをfile_uploaderと同じように扱えるオブジェクトに変換"""
     import io
@@ -831,6 +921,18 @@ uploaded_now          = uploaded_now_raw          or file_to_uploadedfile(CSV_NO
 uploaded_prev         = uploaded_prev_raw         or file_to_uploadedfile(CSV_PREV)
 uploaded_target_sales = uploaded_target_sales_raw or file_to_uploadedfile(CSV_TSALES)
 uploaded_target_zasu  = uploaded_target_zasu_raw  or file_to_uploadedfile(CSV_TZASU)
+
+# 新しくアップロードされた実績CSVを永続DBへ保存
+if uploaded_now_raw is not None:
+    save_raw_csv_to_db("sales_now_raw", uploaded_now_raw)
+if uploaded_prev_raw is not None:
+    save_raw_csv_to_db("sales_prev_raw", uploaded_prev_raw)
+
+# ローカルCSVが消えても売上管理DBから前回データを復元
+if uploaded_now is None:
+    uploaded_now = load_raw_csv_from_db("sales_now_raw")
+if uploaded_prev is None:
+    uploaded_prev = load_raw_csv_from_db("sales_prev_raw")
 
 # 目標CSVがない場合はGoogleスプレッドシートから自動取得
 if uploaded_target_sales is None:
