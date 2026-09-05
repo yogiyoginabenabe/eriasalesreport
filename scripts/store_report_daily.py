@@ -5,7 +5,8 @@ import json
 import os
 import sys
 import tomllib
-from datetime import datetime
+import calendar
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -166,26 +167,58 @@ def upsert_history(client, incoming_rows) -> tuple[int, int]:
         else:
             additions.append(text_row)
 
-    if updates:
-        sheet.batch_update(updates)
-    if additions:
-        sheet.append_rows(additions, value_input_option="RAW")
+    # Google Sheets APIの1リクエストを小さく保ち、長期履歴でも失敗しにくくする。
+    for offset in range(0, len(updates), 500):
+        sheet.batch_update(updates[offset:offset + 500])
+    for offset in range(0, len(additions), 1000):
+        sheet.append_rows(additions[offset:offset + 1000], value_input_option="RAW")
     return len(additions), len(updates)
+
+
+def month_ranges(start_month: str, end_month: str) -> list[tuple[str, str]]:
+    """YYYYMMの開始月〜終了月を、月ごとのYYYYMMDD範囲へ変換する。"""
+    start = datetime.strptime(start_month, "%Y%m").date().replace(day=1)
+    end = datetime.strptime(end_month, "%Y%m").date().replace(day=1)
+    if start > end:
+        raise ValueError("開始月は終了月以前を指定してください")
+    yesterday = datetime.now(ZoneInfo("Asia/Tokyo")).date() - timedelta(days=1)
+    ranges = []
+    cursor = start
+    while cursor <= end and cursor <= yesterday:
+        last_day = calendar.monthrange(cursor.year, cursor.month)[1]
+        month_end = min(date(cursor.year, cursor.month, last_day), yesterday)
+        ranges.append((cursor.strftime("%Y%m%d"), month_end.strftime("%Y%m%d")))
+        cursor = (cursor.replace(day=28) + timedelta(days=4)).replace(day=1)
+    if not ranges:
+        raise ValueError("取得できる過去期間がありません")
+    return ranges
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--date", help="対象日 YYYYMMDD。省略時は日本時間の当日")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--date", help="対象日 YYYYMMDD。省略時は日本時間の当日")
+    mode.add_argument("--start-month", help="過去一括取得の開始月 YYYYMM")
+    parser.add_argument("--end-month", help="過去一括取得の終了月 YYYYMM（省略時は開始月と同じ）")
     parser.add_argument("--debug-dir", default="debug")
     args = parser.parse_args()
 
-    ymd = args.date or datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y%m%d")
-    datetime.strptime(ymd, "%Y%m%d")
+    if args.end_month and not args.start_month:
+        parser.error("--end-monthを使う場合は--start-monthも指定してください")
+    if args.start_month:
+        periods = month_ranges(args.start_month, args.end_month or args.start_month)
+        log(f"過去一括取得: {periods[0][0]}〜{periods[-1][1]}（{len(periods)}か月）")
+    else:
+        ymd = args.date or datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y%m%d")
+        datetime.strptime(ymd, "%Y%m%d")
+        periods = [(ymd, ymd)]
+        log(f"取得対象日: {ymd}")
+
     required_env("YOGIBO_STAFF_ID")
     required_env("YOGIBO_STAFF_PASSWORD")
     debug_dir = Path(args.debug_dir)
     debug_dir.mkdir(parents=True, exist_ok=True)
-    log(f"取得対象日: {ymd}")
+    all_csv_rows = []
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
@@ -193,8 +226,16 @@ def main() -> None:
         page = context.new_page()
         try:
             report_api.login(page)
-            raw = report_api.fetch_report_csv(page, ymd)
-            (debug_dir / f"store-report-{ymd}.csv").write_bytes(raw)
+            for start_ymd, end_ymd in periods:
+                log(f"CSV取得中: {start_ymd}〜{end_ymd}")
+                raw = report_api.fetch_report_csv(page, start_ymd, end_ymd)
+                (debug_dir / f"store-report-{start_ymd}-{end_ymd}.csv").write_bytes(raw)
+                try:
+                    rows = report_api.parse_report_csv(raw)
+                    all_csv_rows.extend(rows)
+                    log(f"CSV取得完了: {len(rows)}行")
+                except report_api.NoDataYetError as exc:
+                    log(f"データなし（継続）: {exc}")
         except Exception:
             page.screenshot(path=str(debug_dir / "failure.png"), full_page=True)
             (debug_dir / "failure_url.txt").write_text(page.url, encoding="utf-8")
@@ -202,17 +243,16 @@ def main() -> None:
         finally:
             browser.close()
 
-    try:
-        csv_rows = report_api.parse_report_csv(raw)
-    except report_api.NoDataYetError as exc:
-        log(f"未確定データ: {exc}")
+    if not all_csv_rows:
+        log("対象期間に保存可能なデータはありませんでした")
         return
 
     client = google_client()
     target_stores = load_target_stores(client)
-    history_rows = to_history_rows(csv_rows, target_stores, ymd)
+    history_rows = to_history_rows(all_csv_rows, target_stores, periods[0][0])
     inserted, updated = upsert_history(client, history_rows)
-    log(f"保存完了: 対象店舗 {len(history_rows) // len(METRICS)}店 / 新規 {inserted}行 / 更新 {updated}行")
+    store_days = len({(row[1], row[4]) for row in history_rows})
+    log(f"保存完了: 店舗日数 {store_days} / 新規 {inserted}行 / 更新 {updated}行")
 
 
 if __name__ == "__main__":
