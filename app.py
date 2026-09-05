@@ -2423,6 +2423,42 @@ elif st.session_state.get('current_page', 'summary') == 'report':
     max_hist_date = hist["日付"].max().date()
     agencies = sorted([a for a in hist["代行会社"].dropna().unique() if str(a).strip()])
 
+    st.markdown("### 📝 ストアマネージャー日報")
+    daily_report_file = st.file_uploader(
+        "ストアマネージャー日報まとめCSV",
+        type="csv",
+        key="manager_daily_report_csv",
+        help="土曜は月〜金、日曜は土曜、月曜は日曜の日報を使用します。",
+    )
+
+    @st.cache_data(show_spinner=False)
+    def _load_manager_reports(file_bytes):
+        import io
+        required = {"日付", "店舗名", "マネージャー名", "グッド！", "オポチュニティ↑"}
+        for encoding in ("utf-8-sig", "cp932", "utf-8"):
+            try:
+                df = pd.read_csv(io.BytesIO(file_bytes), encoding=encoding)
+                if not required.issubset(df.columns):
+                    return pd.DataFrame(), "必要な列が見つかりません。"
+                df["日付"] = pd.to_datetime(df["日付"], errors="coerce")
+                df = df.dropna(subset=["日付", "店舗名", "マネージャー名"]).copy()
+                for col in ["店舗名", "マネージャー名", "グッド！", "オポチュニティ↑", "個人的なこと", "改善要望"]:
+                    if col not in df.columns:
+                        df[col] = ""
+                    df[col] = df[col].fillna("").astype(str).str.strip()
+                return df, ""
+            except UnicodeDecodeError:
+                continue
+            except Exception as exc:
+                return pd.DataFrame(), str(exc)
+        return pd.DataFrame(), "CSVの文字コードを判定できませんでした。"
+
+    manager_reports = pd.DataFrame()
+    if daily_report_file is not None:
+        manager_reports, manager_report_error = _load_manager_reports(daily_report_file.getvalue())
+        if manager_report_error:
+            st.error(f"日報CSVの読み込みエラー：{manager_report_error}")
+
     rc1, rc2, rc3 = st.columns([1.4, 1.8, 2])
     with rc1:
         report_date = st.date_input("レポート基準日", value=max_hist_date + pd.Timedelta(days=1), key="report_date")
@@ -2448,6 +2484,49 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         end_date = dc2.date_input("終了日", value=report_date, key="report_end")
 
     agency_stores = sorted(hist[hist["代行会社"] == agency]["店舗名"].dropna().unique())
+
+    # 日報の対象期間：直近の内容に反応するため曜日ごとに固定
+    if report_date.weekday() == 5:  # 土曜：直前の月〜金
+        diary_start = report_date - pd.Timedelta(days=5)
+        diary_end = report_date - pd.Timedelta(days=1)
+    elif report_date.weekday() in (6, 0):  # 日曜・月曜：前日のみ
+        diary_start = report_date - pd.Timedelta(days=1)
+        diary_end = diary_start
+    else:
+        diary_start = report_date - pd.Timedelta(days=1)
+        diary_end = diary_start
+
+    agency_reports = pd.DataFrame()
+    selected_reports = pd.DataFrame()
+    if not manager_reports.empty:
+        agency_reports = manager_reports[
+            manager_reports["店舗名"].isin(agency_stores)
+            & (manager_reports["日付"].dt.date >= diary_start)
+            & (manager_reports["日付"].dt.date <= diary_end)
+        ].copy()
+
+        # 優先順位：新しさ → 具体的行動 → 努力の承認 → 売上との関連性
+        action_words = ["接客", "成約", "提案", "体験", "8ステップ", "ハンモック", "名刺", "戻り", "セット", "カバー", "声掛け", "アプローチ"]
+        effort_words = ["継続", "工夫", "挑戦", "改善", "粘り", "意識", "徹底", "フォロー", "共有", "教育", "ロープレ"]
+        sales_words = ["売上", "予算", "目標", "達成", "単価", "件", "円", "座数", "客数", "CVR", "ソファ", "Premium"]
+
+        def _report_score(row):
+            text_all = " ".join(str(row.get(col, "")) for col in ["グッド！", "オポチュニティ↑", "個人的なこと", "改善要望"])
+            recency = max(0, (row["日付"].date() - diary_start).days) * 100
+            action = min(sum(text_all.count(word) for word in action_words), 8) * 12
+            effort = min(sum(text_all.count(word) for word in effort_words), 6) * 8
+            sales = min(sum(text_all.count(word) for word in sales_words), 6) * 6
+            detail = min(len(text_all), 500) / 25
+            return recency + action + effort + sales + detail
+
+        agency_reports["_優先スコア"] = agency_reports.apply(_report_score, axis=1)
+        selected_reports = (
+            agency_reports.sort_values(["_優先スコア", "日付"], ascending=[False, False])
+            .drop_duplicates(subset=["店舗名"], keep="first")
+            .head(5)
+            .copy()
+        )
+
     cur = hist[(hist["代行会社"] == agency) & (hist["日付"].dt.date >= start_date) & (hist["日付"].dt.date <= end_date)].copy()
     prev_start = start_date - pd.Timedelta(weeks=52)
     prev_end = end_date - pd.Timedelta(weeks=52)
@@ -2502,6 +2581,17 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         )
     st.dataframe(report_display, use_container_width=True, hide_index=True)
 
+    st.markdown("### 💬 日報レスポンス候補")
+    st.caption(f"対象日報：{diary_start:%Y/%m/%d}〜{diary_end:%Y/%m/%d}（新しさ→具体的行動→承認しやすさ→売上との関連性で選定）")
+    if daily_report_file is None:
+        st.info("ストアマネージャー日報まとめCSVをアップロードすると、レスポンス候補を選定できます。")
+    elif selected_reports.empty:
+        st.warning("選択した会社・対象期間に該当する日報がありません。")
+    else:
+        source_view = selected_reports[["日付", "店舗名", "マネージャー名", "グッド！", "オポチュニティ↑"]].copy()
+        source_view["日付"] = source_view["日付"].dt.strftime("%Y/%m/%d")
+        st.dataframe(source_view, use_container_width=True, hide_index=True)
+
     weak = report_df.iloc[1:].sort_values("受注目標比", na_position="last").head(3)
     weak_names = "、".join(weak["店舗名"].tolist()) if not weak.empty else "なし"
     heading = report_type.split("：", 1)[-1]
@@ -2514,6 +2604,59 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         + (f"（目標比 {total['座数目標比']:.1f}%／前年比 {total['座数前年比']:.1f}%）" if pd.notna(total['座数目標比']) and pd.notna(total['座数前年比']) else "")
         + f"\n\n重点確認店舗：{weak_names}\n各店、残り期間の目標達成に向けてアクションをお願いします。"
     )
+    # Gemini APIが設定済みの場合のみ、選定した日報と売上データから文章を生成
+    generation_key = f"{agency}|{report_date}|{getattr(daily_report_file, 'name', '')}"
+    gemini_api_key = st.secrets.get("GEMINI_API_KEY", "")
+    if not selected_reports.empty:
+        if gemini_api_key:
+            if st.button("✨ AIレポートを生成", type="primary", key="generate_grounded_report"):
+                report_sources = selected_reports[
+                    ["日付", "店舗名", "マネージャー名", "グッド！", "オポチュニティ↑", "個人的なこと", "改善要望"]
+                ].copy()
+                report_sources["日付"] = report_sources["日付"].dt.strftime("%Y/%m/%d")
+                prompt = f"""
+あなたはYogiboのエリアマネージャー向け社内投稿を作成します。
+以下の【売上サマリー】と【選定済み日報】だけを根拠に、日本語のTUNAG投稿文を作成してください。
+
+絶対条件：
+- ソースにない事実、人物、行動、数値、施策を追加しない。
+- 不明なことは推測しない。
+- 各マネージャーへのレスポンスでは、氏名・店舗名・具体的な日報内容を正確に使う。
+- 日報の表現を尊重し、本人の努力や工夫を具体的に承認する。
+- 売上との関係がソースから断定できない場合、因果関係を断定しない。
+- 冒頭総括、SM日報レスポンス、これからのアクションの順にする。
+- 読み手を前向きにする熱量ある文体にする。
+- [User Query]などの機械的な注記は出力しない。
+
+【レポート種別】
+{report_type}
+【対象会社】
+{agency}
+【売上対象期間】
+{start_date:%Y/%m/%d}〜{end_date:%Y/%m/%d}
+【売上サマリー】
+{report_df.to_csv(index=False)}
+【選定済み日報】
+{report_sources.to_csv(index=False)}
+"""
+                try:
+                    from google import genai
+                    client = genai.Client(api_key=gemini_api_key)
+                    response = client.models.generate_content(model="gemini-3.8-flash", contents=prompt)
+                    generated_text = (response.text or "").strip()
+                    if not generated_text:
+                        raise ValueError("AIから文章が返されませんでした。")
+                    st.session_state["_generated_tunag"] = {"key": generation_key, "text": generated_text}
+                    st.success("日報と売上サマリーに基づいてレポートを生成しました。")
+                except Exception as exc:
+                    st.error(f"AIレポートを生成できませんでした：{exc}")
+        else:
+            st.info("AI文章生成を有効にするには、Streamlit Secretsへ GEMINI_API_KEY を追加してください。")
+
+    generated = st.session_state.get("_generated_tunag", {})
+    if generated.get("key") == generation_key:
+        tunag_text = generated.get("text", tunag_text)
+
     st.markdown("### ✍️ TUNAG投稿文")
     st.code(tunag_text, language=None)
     dl1, dl2 = st.columns(2)
