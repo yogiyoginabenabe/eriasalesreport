@@ -2486,8 +2486,11 @@ elif st.session_state.get('current_page', 'summary') == 'report':
     agency_stores = sorted(hist[hist["代行会社"] == agency]["店舗名"].dropna().unique())
 
     # 日報の対象期間：直近の内容に反応するため曜日ごとに固定
-    if report_date.weekday() == 5:  # 土曜：直前の月〜金
-        diary_start = report_date - pd.Timedelta(days=5)
+    if report_date.weekday() == 5:  # 土曜：直前の月〜金（ただし月初より前は含めない）
+        diary_start = max(
+            report_date - pd.Timedelta(days=5),
+            report_date.replace(day=1),
+        )
         diary_end = report_date - pd.Timedelta(days=1)
     elif report_date.weekday() in (6, 0):  # 日曜・月曜：前日のみ
         diary_start = report_date - pd.Timedelta(days=1)
