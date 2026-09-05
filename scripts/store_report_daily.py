@@ -19,7 +19,9 @@ SALES_DB_SHEET_ID = "1yJdfZj-zq9ilbe7e2h4kDllhH-e092hWAps6uJgf2CU"
 STORE_MASTER_SHEET_ID = "1eNpYmFkubjtFEwKgnpzFp2DUGoMBYJklDCy1gGOa5Rw"
 STORE_MASTER_TAB = "店舗データ"
 HISTORY_TAB = "sales_history"
+SUMMARY_CACHE_TAB = "sales_summary_cache"
 HISTORY_COLUMNS = ["店舗名", "店舗コード", "代行会社", "エリア", "日付", "指標", "値"]
+SUMMARY_CACHE_COLUMNS = ["集計単位", "開始日", "終了日", "店舗名", "店舗コード", "代行会社", "エリア", "指標", "値"]
 METRICS = ["受注金額(税抜)", "座数", "客数", "CVR", "客単価", "品数"]
 TARGET_AMS = {"渡邊_A", "渡邊_B"}
 
@@ -201,6 +203,73 @@ def upsert_history(client, incoming_rows) -> tuple[int, int]:
     return len(additions), len(updates)
 
 
+def to_summary_cache_rows(csv_rows, target_stores, period, start_ymd, end_ymd):
+    """週別・月別CSVを高速サマリー用の別テーブルへ変換する。"""
+    rows_by_key = {}
+    start_iso = datetime.strptime(start_ymd, "%Y%m%d").strftime("%Y-%m-%d")
+    end_iso = datetime.strptime(end_ymd, "%Y%m%d").strftime("%Y-%m-%d")
+    for csv_row in csv_rows:
+        code = str(csv_row.get("店舗コード", "")).strip()
+        if code not in target_stores:
+            continue
+        master = target_stores[code]
+        for metric in METRICS:
+            key = (period, start_iso, end_iso, code, metric)
+            rows_by_key[key] = [
+                period, start_iso, end_iso, master["店舗名"], code,
+                master["代行会社"], master["エリア"], metric,
+                numeric_value(csv_row.get(metric, "")),
+            ]
+    if not rows_by_key:
+        raise RuntimeError("取得CSVに担当店舗の集計データがありません")
+    return list(rows_by_key.values())
+
+
+def upsert_summary_cache(client, incoming_rows) -> tuple[int, int]:
+    """小容量の集計キャッシュをキー単位で更新し、まとめて1回で保存する。"""
+    book = client.open_by_key(SALES_DB_SHEET_ID)
+    try:
+        sheet = book.worksheet(SUMMARY_CACHE_TAB)
+    except gspread.WorksheetNotFound:
+        sheet = book.add_worksheet(title=SUMMARY_CACHE_TAB, rows=1000, cols=len(SUMMARY_CACHE_COLUMNS))
+    values = sheet.get_all_values()
+    existing_rows = values[1:] if values and values[0] == SUMMARY_CACHE_COLUMNS else []
+    merged = {}
+    for row in existing_rows:
+        padded = (list(row) + [""] * len(SUMMARY_CACHE_COLUMNS))[:len(SUMMARY_CACHE_COLUMNS)]
+        merged[(padded[0], padded[1], padded[2], padded[4], padded[7])] = padded
+    before = set(merged)
+    for row in incoming_rows:
+        text_row = [str(value) for value in row]
+        merged[(text_row[0], text_row[1], text_row[2], text_row[4], text_row[7])] = text_row
+    output = [SUMMARY_CACHE_COLUMNS] + list(merged.values())
+    if sheet.row_count < len(output) + 10:
+        sheet.resize(rows=len(output) + 10)
+    sheet.clear()
+    sheet.update(range_name=f"A1:I{len(output)}", values=output, value_input_option="RAW")
+    incoming_keys = {
+        (str(r[0]), str(r[1]), str(r[2]), str(r[4]), str(r[7]))
+        for r in incoming_rows
+    }
+    return len(incoming_keys - before), len(incoming_keys & before)
+
+
+def previous_summary_range(start_ymd, end_ymd, period):
+    start = datetime.strptime(start_ymd, "%Y%m%d").date()
+    end = datetime.strptime(end_ymd, "%Y%m%d").date()
+    if period == "w":
+        return (
+            (start - timedelta(weeks=52)).strftime("%Y%m%d"),
+            (end - timedelta(weeks=52)).strftime("%Y%m%d"),
+        )
+    def previous_year(value):
+        try:
+            return value.replace(year=value.year - 1)
+        except ValueError:
+            return value.replace(year=value.year - 1, day=28)
+    return previous_year(start).strftime("%Y%m%d"), previous_year(end).strftime("%Y%m%d")
+
+
 def month_ranges(start_month: str, end_month: str) -> list[tuple[str, str]]:
     """YYYYMMの開始月〜終了月を、月ごとのYYYYMMDD範囲へ変換する。"""
     start = datetime.strptime(start_month, "%Y%m").date().replace(day=1)
@@ -225,13 +294,25 @@ def main() -> None:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--date", help="対象日 YYYYMMDD。省略時は日本時間の当日")
     mode.add_argument("--start-month", help="過去一括取得の開始月 YYYYMM")
+    mode.add_argument("--summary-start", help="高速サマリー取得の開始日 YYYYMMDD")
     parser.add_argument("--end-month", help="過去一括取得の終了月 YYYYMM（省略時は開始月と同じ）")
+    parser.add_argument("--summary-end", help="高速サマリー取得の終了日 YYYYMMDD")
+    parser.add_argument("--summary-period", choices=["w", "m"], help="高速サマリーの表示形式")
     parser.add_argument("--debug-dir", default="debug")
     args = parser.parse_args()
 
     if args.end_month and not args.start_month:
         parser.error("--end-monthを使う場合は--start-monthも指定してください")
-    if args.start_month:
+    if args.summary_start and (not args.summary_end or not args.summary_period):
+        parser.error("--summary-startには--summary-endと--summary-periodが必要です")
+    if args.summary_end and not args.summary_start:
+        parser.error("--summary-endには--summary-startが必要です")
+    if args.summary_start:
+        datetime.strptime(args.summary_start, "%Y%m%d")
+        datetime.strptime(args.summary_end, "%Y%m%d")
+        periods = [(args.summary_start, args.summary_end)]
+        log(f"高速サマリー取得: {args.summary_start}〜{args.summary_end}（{args.summary_period}）")
+    elif args.start_month:
         periods = month_ranges(args.start_month, args.end_month or args.start_month)
         log(f"過去一括取得: {periods[0][0]}〜{periods[-1][1]}（{len(periods)}か月）")
     else:
@@ -252,12 +333,22 @@ def main() -> None:
         page = context.new_page()
         try:
             report_api.login(page)
-            for start_ymd, end_ymd in periods:
-                log(f"CSV取得中: {start_ymd}〜{end_ymd}")
-                raw = report_api.fetch_report_csv(page, start_ymd, end_ymd)
-                (debug_dir / f"store-report-{start_ymd}-{end_ymd}.csv").write_bytes(raw)
+            fetch_periods = list(periods)
+            if args.summary_start:
+                fetch_periods.append(previous_summary_range(
+                    args.summary_start, args.summary_end, args.summary_period
+                ))
+            for start_ymd, end_ymd in fetch_periods:
+                report_period = args.summary_period if args.summary_start else "d"
+                log(f"CSV取得中: {start_ymd}〜{end_ymd}（{report_period}）")
+                raw = report_api.fetch_report_csv(
+                    page, start_ymd, end_ymd, period=report_period
+                )
+                (debug_dir / f"store-report-{report_period}-{start_ymd}-{end_ymd}.csv").write_bytes(raw)
                 try:
                     rows = report_api.parse_report_csv(raw)
+                    if args.summary_start:
+                        rows = [(start_ymd, end_ymd, row) for row in rows]
                     all_csv_rows.extend(rows)
                     log(f"CSV取得完了: {len(rows)}行")
                 except report_api.NoDataYetError as exc:
@@ -275,10 +366,22 @@ def main() -> None:
 
     client = google_client()
     target_stores = load_target_stores(client)
-    history_rows = to_history_rows(all_csv_rows, target_stores, periods[0][0])
-    inserted, updated = upsert_history(client, history_rows)
-    store_days = len({(row[1], row[4]) for row in history_rows})
-    log(f"保存完了: 店舗日数 {store_days} / 新規 {inserted}行 / 更新 {updated}行")
+    if args.summary_start:
+        summary_rows = []
+        grouped = {}
+        for start_ymd, end_ymd, row in all_csv_rows:
+            grouped.setdefault((start_ymd, end_ymd), []).append(row)
+        for (start_ymd, end_ymd), rows in grouped.items():
+            summary_rows.extend(to_summary_cache_rows(
+                rows, target_stores, args.summary_period, start_ymd, end_ymd
+            ))
+        inserted, updated = upsert_summary_cache(client, summary_rows)
+        log(f"高速サマリー保存完了: 新規 {inserted}行 / 更新 {updated}行")
+    else:
+        history_rows = to_history_rows(all_csv_rows, target_stores, periods[0][0])
+        inserted, updated = upsert_history(client, history_rows)
+        store_days = len({(row[1], row[4]) for row in history_rows})
+        log(f"保存完了: 店舗日数 {store_days} / 新規 {inserted}行 / 更新 {updated}行")
 
 
 if __name__ == "__main__":
