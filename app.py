@@ -295,7 +295,7 @@ TARGET_METRICS = ["受注金額(税抜)", "座数"]
 # ─────────────────────────────────────────────
 # 店舗マスタ 読み書き
 # ─────────────────────────────────────────────
-STORE_DATA_SHEET_ID = "1jJcIVOFTICCPr3YnoqkO-NxRzwTcvr_HfwgZunS0vdY"
+STORE_DATA_SHEET_ID = "1eNpYmFkubjtFEwKgnpzFp2DUGoMBYJklDCy1gGOa5Rw"
 STORE_DATA_TAB = "店舗データ"
 STORE_AM_NAMES = {"渡邊_A", "渡邊_B"}
 
