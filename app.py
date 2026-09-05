@@ -325,7 +325,11 @@ def load_master():
     except Exception as exc:
         st.session_state["_store_master_error"] = str(exc)
 
-    # Google Sheetsへ接続できない場合のみ従来マスタへフォールバック
+    # Google Sheetsへ接続できない場合は現在保存済みの一覧を維持
+    return load_saved_master()
+
+def load_saved_master():
+    """Google Sheetsへアクセスせず、現在保存済みの店舗一覧を読み込む。"""
     if os.path.exists(MASTER_FILE):
         with open(MASTER_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -757,9 +761,9 @@ if st.session_state.get('_targets_index_hash') != _targets_hash:
 # ─────────────────────────────────────────────
 # セッション初期化
 # ─────────────────────────────────────────────
-# 店舗マスタはセッション開始時に1回だけ取得し、以降はボタン操作で更新
+# 店舗マスタは保存済み一覧を表示し、Google Sheetsからの取得はボタン操作時のみ
 if "stores" not in st.session_state:
-    st.session_state.stores = load_master()
+    st.session_state.stores = load_saved_master()
 if "targets" not in st.session_state:
     st.session_state.targets = load_targets()
 
@@ -2685,6 +2689,7 @@ elif st.session_state.get('current_page', 'summary') == 'master':
         if st.session_state.get("_store_master_error"):
             st.error("最新情報を取得できませんでした。現在の店舗一覧をそのまま表示します。")
         else:
+            save_master(refreshed_stores)
             st.session_state.stores = refreshed_stores
             st.success(f"最新情報を取得しました（{len(refreshed_stores)}店舗）")
 
