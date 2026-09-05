@@ -2456,12 +2456,16 @@ elif st.session_state.get('current_page', 'summary') == 'report':
     m4.metric("🎯 座数目標比", f"{total['座数目標比']:.1f}%" if pd.notna(total['座数目標比']) else "—")
 
     st.markdown("### 📋 キャプチャ用サマリー")
-    st.dataframe(
-        report_df.style.format({
-            "受注目標": "{:,.0f}", "受注実績": "{:,.0f}", "座数目標": "{:,.0f}", "座数実績": "{:,.0f}",
-            "受注目標比": "{:.1f}%", "受注前年比": "{:.1f}%", "座数目標比": "{:.1f}%", "座数前年比": "{:.1f}%",
-        }, na_rep="—"), use_container_width=True, hide_index=True,
-    )
+    report_display = report_df.copy()
+    for col in ["受注目標", "受注実績", "座数目標", "座数実績"]:
+        report_display[col] = report_display[col].map(
+            lambda value: "—" if pd.isna(value) else f"{value:,.0f}"
+        )
+    for col in ["受注目標比", "受注前年比", "座数目標比", "座数前年比"]:
+        report_display[col] = report_display[col].map(
+            lambda value: "—" if pd.isna(value) else f"{value:.1f}%"
+        )
+    st.dataframe(report_display, use_container_width=True, hide_index=True)
 
     weak = report_df.iloc[1:].sort_values("受注目標比", na_position="last").head(3)
     weak_names = "、".join(weak["店舗名"].tolist()) if not weak.empty else "なし"
