@@ -2390,7 +2390,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
 
     rc1, rc2, rc3 = st.columns([1.4, 1.8, 2])
     with rc1:
-        report_date = st.date_input("レポート基準日", value=max_hist_date, key="report_date")
+        report_date = st.date_input("レポート基準日", value=max_hist_date + pd.Timedelta(days=1), key="report_date")
     weekday_default = {5: "土曜：週末ブースト", 6: "日曜：週残取り切り", 0: "月曜：前週振り返り"}.get(report_date.weekday(), "月曜：前週振り返り")
     report_types = ["土曜：週末ブースト", "日曜：週残取り切り", "月曜：前週振り返り", "期間を指定"]
     with rc2:
@@ -2447,7 +2447,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
             "座数目標比": zasu / zasu_tgt * 100 if zasu_tgt else None,
             "座数前年比": zasu / zasu_prev * 100 if zasu_prev else None,
         })
-    report_df = pd.DataFrame(rr)
+    report_df = pd.DataFrame(rr).replace({None: float("nan")})
     total = report_df.iloc[0]
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("💴 受注実績", f"{total['受注実績']:,.0f}円", f"前年比 {total['受注前年比']:.1f}%" if pd.notna(total['受注前年比']) else None)
