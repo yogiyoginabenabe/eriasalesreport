@@ -295,7 +295,38 @@ TARGET_METRICS = ["受注金額(税抜)", "座数"]
 # ─────────────────────────────────────────────
 # 店舗マスタ 読み書き
 # ─────────────────────────────────────────────
+STORE_DATA_SHEET_ID = "1jJcIVOFTICCPr3YnoqkO-NxRzwTcvr_HfwgZunS0vdY"
+STORE_DATA_TAB = "店舗データ"
+STORE_AM_NAMES = {"渡邊_A", "渡邊_B"}
+
+@st.cache_data(ttl=900, show_spinner=False)
 def load_master():
+    """店舗データから渡邊_A/BかつOPENの店舗を自動取得する。"""
+    try:
+        import gspread
+        client = gspread.service_account_from_dict(dict(st.secrets["gcp_service_account"]))
+        values = client.open_by_key(STORE_DATA_SHEET_ID).worksheet(STORE_DATA_TAB).get_all_values()
+        stores = []
+        for row in values[1:]:
+            row = list(row) + [""] * max(0, 9 - len(row))
+            am_name = str(row[4]).strip()
+            open_status = str(row[7]).strip().upper()
+            if am_name not in STORE_AM_NAMES or open_status != "OPEN":
+                continue
+            stores.append({
+                "店舗コード": str(row[0]).strip(),
+                "店舗ID": str(row[1]).strip(),
+                "店舗名": str(row[2]).strip(),
+                "代行会社": str(row[6]).strip(),
+                "エリア": str(row[8]).strip(),
+                "AM名": am_name,
+            })
+        if stores:
+            return stores
+    except Exception as exc:
+        st.session_state["_store_master_error"] = str(exc)
+
+    # Google Sheetsへ接続できない場合のみ従来マスタへフォールバック
     if os.path.exists(MASTER_FILE):
         with open(MASTER_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -727,8 +758,8 @@ if st.session_state.get('_targets_index_hash') != _targets_hash:
 # ─────────────────────────────────────────────
 # セッション初期化
 # ─────────────────────────────────────────────
-if "stores" not in st.session_state:
-    st.session_state.stores = load_master()
+# 15分キャッシュで店舗データを自動同期
+st.session_state.stores = load_master()
 if "targets" not in st.session_state:
     st.session_state.targets = load_targets()
 
@@ -2645,7 +2676,7 @@ elif st.session_state.get('current_page', 'summary') == 'target':
 # ══════════════════════════════════════════════
 elif st.session_state.get('current_page', 'summary') == 'master':
     st.subheader("🏪 店舗マスタ編集")
-    st.info("担当AM変更や店舗の追加・削除ができます。変更はアプリを閉じても保持されます。")
+    st.info("店舗マスタはGoogleスプレッドシート「店舗データ」から15分ごとに自動同期します。対象は渡邊_A／渡邊_BかつOPENの店舗です。")
     stores = st.session_state.stores
 
     # ── 店舗データCSVから一括追加 ──
