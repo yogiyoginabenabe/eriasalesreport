@@ -251,20 +251,23 @@ st.markdown('<div style="padding: 0 16px;">', unsafe_allow_html=True)
 # ナビゲーションバー
 nav_pages = [
     ('top',     '🏠 TOP'),
-    ('summary', '📋 サマリー'),
-    ('detail',  '📈 実績・前年比'),
+    ('summary', '📋 売上管理表'),
     ('history', '🗓️ 期間分析'),
     ('report',  '📨 会社別レポート'),
     ('target',  '🎯 目標カレンダー'),
     ('master',  '🏪 マスタ編集'),
 ]
-nav_cols = st.columns([1.3, 1.3, 1.3, 1.3, 1.6, 1.4, 1.3, 1])
+# 削除済みメニューを開いたままのセッションは売上管理表へ戻す。
+if st.session_state.current_page == 'detail':
+    st.session_state.current_page = 'summary'
+
+nav_cols = st.columns([1.3, 1.5, 1.3, 1.6, 1.4, 1.3, 1])
 for ni, (page_id, label) in enumerate(nav_pages):
     if nav_cols[ni].button(label, key=f'nav_{page_id}', use_container_width=True,
                            type='primary' if st.session_state.current_page==page_id else 'secondary'):
         st.session_state.current_page = page_id
         st.rerun()
-with nav_cols[7]:
+with nav_cols[len(nav_pages)]:
     if st.button('⚙️ 設定', key='nav_settings', use_container_width=True):
         st.session_state.show_settings = not st.session_state.show_settings
         st.session_state.menu_open = st.session_state.show_settings
