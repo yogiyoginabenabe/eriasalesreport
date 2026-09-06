@@ -545,9 +545,9 @@ HISTORY_COLUMNS = ["店舗名", "店舗コード", "代行会社", "エリア", 
 def _empty_history():
     return pd.DataFrame(columns=HISTORY_COLUMNS)
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=30, show_spinner=False)
 def _load_sales_history_from_db():
-    """Google Sheets全件取得を5分キャッシュし、画面操作ごとの通信を防ぐ。"""
+    """Google Sheets全件取得を短時間キャッシュし、TOPの最新性と速度を両立する。"""
     return _db_worksheet("sales_history").get_all_values()
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -1114,6 +1114,12 @@ else:
     else:
         _target_history = load_history(HISTORY_TARGET_FILE)
         st.session_state['_target_history'] = _target_history
+
+# TOPは日次自動取得後のDBを正本として毎回確認する。
+# session_stateだけを使うと、同じブラウザでは古い実績が残り続けてしまう。
+if st.session_state.get('current_page', 'top') == 'top':
+    _sales_history = load_history(HISTORY_SALES_FILE)
+    st.session_state['_sales_history'] = _sales_history
 
 # ─────────────────────────────────────────────
 # ③ 目標CSV読み込みをここで1回だけ実行（重複排除）
