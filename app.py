@@ -1264,16 +1264,34 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
         # _yesterday は上のMTDカットオフブロックで定義済み（_dt_mtd使用）
         _this_month = _yesterday.month
         _this_year  = _yesterday.year
+        # MTDの締め日は「昨日固定」ではなく、実績DBに入っている最新日。
+        # 目標・当年実績・前年同曜日実績を必ず同じ締め日に揃える。
+        try:
+            _cutoff_m, _cutoff_d = [int(v) for v in str(_top_cutoff).split("/")]
+            _target_cutoff_date = _dt_mtd.date(_this_year, _cutoff_m, _cutoff_d)
+        except Exception:
+            _target_cutoff_date = _yesterday
+
+        if _target_cutoff_date < _yesterday:
+            st.warning(
+                f"最新実績は {_target_cutoff_date:%Y/%m/%d} までです。"
+                f"{_yesterday:%Y/%m/%d} 分はまだ実績DBへ反映されていません。"
+            )
+
         _filtered_targets = {}
         for _fk, _fv in st.session_state.targets.items():
             parts = _fk.rsplit('_', 1)
             if len(parts) == 2:
                 try:
                     _fd = pd.to_datetime(parts[1])
-                    # TOPの実績は昨日まで（MTD）だが、目標は月間全体を使う。
-                    if _fd.year == _this_year and _fd.month == _this_month:
+                    if (
+                        _fd.year == _this_year
+                        and _fd.month == _this_month
+                        and _fd.date() <= _target_cutoff_date
+                    ):
                         _filtered_targets[_fk] = _fv
-                except: pass
+                except:
+                    pass
 
         _kpi_items = [
             ('受注金額(税抜)', '💴', '円'),
@@ -1312,7 +1330,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                     )
                 if _tgt_total > 0:
                     _ach = _val / _tgt_total * 100
-                    _delta_str = f'月間目標比 {_ach:.1f}%'
+                    _delta_str = f'目標比MTD {_ach:.1f}%'
                     _delta_color = 'normal' if _ach >= 100 else ('off' if _ach >= 90 else 'inverse')
             if _delta_str is None and not _top_prev.empty:
                 _sub_p = _top_prev[_top_prev['指標']==_metric]['値']
