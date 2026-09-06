@@ -70,11 +70,17 @@ jobs:
       - name: Download and upsert daily sales
         shell: bash
         run: |
+          # サマリー画面からの実行では、比較用の週別・月別データを取得する。
           if [ -n "${{ inputs.summary_start }}" ]; then
             python scripts/store_report_daily.py \
               --summary-start "${{ inputs.summary_start }}" \
               --summary-end "${{ inputs.summary_end }}" \
               --summary-period "${{ inputs.summary_period }}"
+          fi
+
+          # 当月サマリーでは前日の日別実績も同じ実行内で更新する。
+          if [ -n "${{ inputs.store_report_date }}" ]; then
+            python scripts/store_report_daily.py --date "${{ inputs.store_report_date }}"
           elif [ -n "${{ inputs.backfill_start_month }}" ]; then
             END_MONTH="${{ inputs.backfill_end_month }}"
             if [ -z "$END_MONTH" ]; then
@@ -83,10 +89,8 @@ jobs:
             python scripts/store_report_daily.py \
               --start-month "${{ inputs.backfill_start_month }}" \
               --end-month "$END_MONTH"
-          elif [ -n "${{ inputs.store_report_date }}" ]; then
-            python scripts/store_report_daily.py --date "${{ inputs.store_report_date }}"
-          else
-            # 定期実行は翌朝に前日分を取得する。営業中の未確定CSVを避ける。
+          elif [ -z "${{ inputs.summary_start }}" ]; then
+            # 定期実行と空欄の手動実行は、翌朝に前日分を取得する。
             python scripts/store_report_daily.py --yesterday
           fi
 
