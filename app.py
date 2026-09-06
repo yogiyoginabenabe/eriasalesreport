@@ -1235,8 +1235,18 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
 
     # ── 期間フィルター UI ──
     if st.session_state.get('current_page', 'top') == 'top':
-        # MTDデータ取得：session_stateのキャッシュ済みlong_dfを使用（高速）
-        _top_long_now  = _long_now_cached.copy() if not _long_now_cached.empty else pd.DataFrame()
+        # TOPの当年実績は、日次自動取得が保存するsales_historyを正本にする。
+        # sales_now.csv由来の_long_now_cachedを使うと、DB更新後も古い数字が残る。
+        if not _sales_history.empty:
+            _top_long_now = _sales_history.copy()
+            _top_long_now["日付"] = pd.to_datetime(_top_long_now["日付"], errors="coerce")
+            _top_long_now = _top_long_now.dropna(subset=["日付", "指標", "値"])
+            _top_long_now = _top_long_now[_top_long_now["店舗名"].isin(selected_stores)].copy()
+            _top_long_now["日付_原本"] = _top_long_now["日付"].dt.strftime("%Y/%m/%d")
+            _top_long_now["月日"] = _top_long_now["日付"].dt.strftime("%m/%d")
+            _top_long_now["年度"] = "実績"
+        else:
+            _top_long_now = _long_now_cached.copy() if not _long_now_cached.empty else pd.DataFrame()
         _top_long_prev = _long_prev_cached.copy() if not _long_prev_cached.empty else pd.DataFrame()
 
         # MTDカットオフ：「昨日」を基準にする（CSVに未来日付が含まれる場合を考慮）
