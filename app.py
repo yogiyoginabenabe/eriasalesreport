@@ -2,6 +2,14 @@ import streamlit as st
 import pandas as pd
 import json
 import os
+import datetime as _datetime_global
+from zoneinfo import ZoneInfo
+
+
+def _jst_today():
+    """StreamlitサーバーのUTC設定に影響されない日本時間の営業日。"""
+    return _datetime_global.datetime.now(ZoneInfo("Asia/Tokyo")).date()
+
 
 st.set_page_config(page_title="Yogibo 売上管理ダッシュボード", layout="wide", page_icon="📊", initial_sidebar_state="collapsed")
 
@@ -352,7 +360,7 @@ def load_targets():
             data = json.load(f)
         # 月次自動リセット：保存時の年月と現在の年月が違えば削除
         saved_ym = data.get("_saved_ym", "")
-        current_ym = datetime.date.today().strftime("%Y%m")
+        current_ym = _jst_today().strftime("%Y%m")
         if saved_ym and saved_ym != current_ym:
             os.remove(TARGET_FILE)
             return {}
@@ -695,7 +703,7 @@ def get_yoy_prev_days(now_dates_md, mode="dow", now_year=None, prev_year=None):
     """
     import datetime
     if now_year is None:
-        now_year = datetime.date.today().year
+        now_year = _jst_today().year
     if prev_year is None:
         prev_year = now_year - 1
 
@@ -722,7 +730,7 @@ def get_yoy_prev_days_from_prev(prev_dates_md, mode="dow", now_year=None, prev_y
     """
     import datetime
     if now_year is None:
-        now_year = datetime.date.today().year
+        now_year = _jst_today().year
     if prev_year is None:
         prev_year = now_year - 1
 
@@ -1212,7 +1220,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
 
         # MTDカットオフ：「昨日」を基準にする（CSVに未来日付が含まれる場合を考慮）
         import datetime as _dt_mtd
-        _yesterday = _dt_mtd.date.today() - _dt_mtd.timedelta(days=1)
+        _yesterday = _jst_today() - _dt_mtd.timedelta(days=1)
         _yesterday_md = f"{_yesterday.month:02d}/{_yesterday.day:02d}"  # 例: "04/02"
         _top_dates_all = sorted(_top_long_now['月日'].unique()) if not _top_long_now.empty else []
         # 昨日以前のデータのみに絞り込む（今年・前年とも同じ月日で比較）
@@ -1481,7 +1489,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
             _summary_hist_long["年度"] = "実績"
             date_cols_all = sorted(_summary_hist_long["日付_原本"].unique())
             all_dates_dt = [pd.to_datetime(d) for d in date_cols_all]
-            _today_summary = datetime.date.today()
+            _today_summary = _jst_today()
             _current_summary_year = _today_summary.year
             csv_years = sorted(
                 set(d.year for d in all_dates_dt) | set(range(_current_summary_year - 4, _current_summary_year + 1)),
@@ -1497,7 +1505,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
         with fc2:
             month_nums = list(range(1, 13))
             _available_months = sorted(set(d.month for d in all_dates_dt if d.year == sel_year), reverse=True)
-            _default_month = _available_months[0] if _available_months else (datetime.date.today().month if sel_year == datetime.date.today().year else 1)
+            _default_month = _available_months[0] if _available_months else (_jst_today().month if sel_year == _jst_today().year else 1)
             _month_index = month_nums.index(_default_month)
             sel_month_label = st.selectbox("月", [f"{m}月" for m in month_nums], index=_month_index, key="ov_month")
             sel_month_num   = int(sel_month_label.replace("月", ""))
@@ -1534,7 +1542,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
         else:
             _summary_request_start, _summary_request_end = sel_week_range
             _summary_period_code = "w"
-        _summary_yesterday = datetime.date.today() - datetime.timedelta(days=1)
+        _summary_yesterday = _jst_today() - datetime.timedelta(days=1)
         _summary_request_end = min(_summary_request_end, _summary_yesterday)
         _summary_period_label = "月別" if _summary_period_code == "m" else "週別"
         fetch_col, refresh_col, note_col = st.columns([1.4, 1.2, 4])
@@ -1559,7 +1567,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                 st.session_state.pop("_summary_fetch_started", None)
                 st.rerun()
         with note_col:
-            st.caption("月間累計は月別CSV、W1などは週別CSVを使用します。再取得しても重複しません。")
+            st.caption("当月実績は毎朝の日別DB、前年同月は月別CSV、前年同週は52週前の週別CSVを使います。再取得しても重複しません。")
         if st.session_state.get("_summary_fetch_started"):
             st.success(st.session_state["_summary_fetch_started"])
 
@@ -1709,7 +1717,8 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                 _ov_prev_days = {prev_md for now_md, prev_md in _ov_reverse_map.items() if now_md in _ov_now_days}
                 ov_long_prev = _long_prev_cached[_long_prev_cached["月日"].isin(_ov_prev_days)] if _ov_prev_days else pd.DataFrame()
     
-        # 月別・週別キャッシュがあれば日別履歴より優先する。
+        # 当月の今年実績は毎日蓄積する日別DBを正本にする。
+        # 過去月の今年実績と、前年比較だけを月別・週別キャッシュで補う。
         def _summary_cache_to_long(df):
             if df is None or df.empty:
                 return pd.DataFrame()
@@ -1717,10 +1726,14 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
             out["月日"] = _summary_request_end.strftime("%m/%d")
             out["年度"] = "集計"
             return out
-        if not _summary_cache_now.empty:
+        _is_live_month = (
+            sel_year == _jst_today().year and sel_month_num == _jst_today().month
+        )
+        if not _is_live_month and not _summary_cache_now.empty:
             ov_long_now = _summary_cache_to_long(_summary_cache_now)
+        if not _summary_cache_prev.empty:
             ov_long_prev = _summary_cache_to_long(_summary_cache_prev)
-            ov_has_prev = not ov_long_prev.empty
+            ov_has_prev = True
 
         # 目標：期間内の日別目標を合計
         # 目標DataFrameをキャッシュ（get_store_target_period内で毎回CSV読むのを防ぐ）
@@ -2062,7 +2075,7 @@ elif st.session_state.get('current_page', 'summary') == 'detail':
     # ── KPI カード ──
     # long_nowはキャッシュ済み全期間DF → MTD（昨日まで・同月）に絞って計算
     import datetime as _dt_det
-    _det_yesterday = _dt_det.date.today() - _dt_det.timedelta(days=1)
+    _det_yesterday = _jst_today() - _dt_det.timedelta(days=1)
     _det_month_str = f"{_det_yesterday.month:02d}"
     _det_cutoff_md = f"{_det_yesterday.month:02d}/{_det_yesterday.day:02d}"
     long_now_mtd = long_now[
@@ -2497,7 +2510,7 @@ elif st.session_state.get('current_page', 'summary') == 'history':
     hist["日付"] = pd.to_datetime(hist["日付"])
     hist["会計年度"] = hist["日付"].apply(lambda d: d.year if d.month >= 3 else d.year - 1)
     import datetime as _dt_history
-    _current_fy = _dt_history.date.today().year if _dt_history.date.today().month >= 3 else _dt_history.date.today().year - 1
+    _current_fy = _jst_today().year if _jst_today().month >= 3 else _jst_today().year - 1
     fiscal_years = sorted(
         set(hist["会計年度"].unique().tolist()) | set(range(_current_fy - 4, _current_fy + 1)),
         reverse=True,
@@ -2512,7 +2525,7 @@ elif st.session_state.get('current_page', 'summary') == 'history':
         if period_kind == "月":
             _month_options = ["3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月", "1月", "2月"]
             _latest_date_for_fy = hist[hist["会計年度"] == fiscal_year]["日付"].max()
-            _default_month = f"{_latest_date_for_fy.month}月" if pd.notna(_latest_date_for_fy) else f"{_dt_history.date.today().month}月"
+            _default_month = f"{_latest_date_for_fy.month}月" if pd.notna(_latest_date_for_fy) else f"{_jst_today().month}月"
             _month_index = _month_options.index(_default_month) if _default_month in _month_options else 0
             period_value = st.selectbox("期間", _month_options, index=_month_index, key="hist_month")
         elif period_kind == "四半期":
