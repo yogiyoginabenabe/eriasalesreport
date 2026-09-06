@@ -96,7 +96,7 @@ jobs:
               --end-month "$END_MONTH"
           elif [ -z "${{ inputs.summary_start }}" ]; then
             # 定期実行と空欄の手動実行は、翌朝に前日分を取得する。
-            python scripts/store_report_daily.py --yesterday
+            python scripts/store_report_daily.py --recent-days 3
           fi
 
       - name: Upload diagnostics on failure
