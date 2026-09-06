@@ -1931,7 +1931,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
             has_yoy = ov_has_prev and not ov_long_prev.empty
             sep_h = ' ov-th-sep' if mi2 > 0 else ''
             if is_tm:
-                html_parts.append(f'<th class="ov-th{sep_h}">目標</th><th class="ov-th">実績</th><th class="ov-th">Gap</th><th class="ov-th">目標比</th>')
+                html_parts.append(f'<th class="ov-th{sep_h}">目標</th><th class="ov-th">実績</th><th class="ov-th">差額</th><th class="ov-th">目標比</th>')
             else:
                 html_parts.append(f'<th class="ov-th{sep_h}">実績</th>')
             if has_yoy:
@@ -1977,7 +1977,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
             has_yoy = ov_has_prev and not ov_long_prev.empty
             if is_tm:
                 _hdr1 += [label, '', '', '']
-                _hdr2 += ['目標', '実績', 'Gap', '目標比(%)']
+                _hdr2 += ['目標', '実績', '差額', '目標比(%)']
             else:
                 _hdr1 += [label]
                 _hdr2 += ['実績']
@@ -2584,7 +2584,7 @@ elif st.session_state.get('current_page', 'summary') == 'history':
     prev_df = hist[(hist["日付"].dt.date >= prev_start) & (hist["日付"].dt.date <= prev_end)].copy()
     target_df = tgt_hist[
         (pd.to_datetime(tgt_hist["日付"]).dt.date >= start_date) &
-        (pd.to_datetime(tgt_hist["日付"]).dt.date <= actual_end)
+        (pd.to_datetime(tgt_hist["日付"]).dt.date <= end_date)
     ].copy() if not tgt_hist.empty else _empty_history()
 
     period_name = period_value or "通期"
@@ -2626,18 +2626,32 @@ elif st.session_state.get('current_page', 'summary') == 'history':
             report_rows.append({
                 "区分": row_type, "代行会社／店舗": label,
                 "受注実績": sales, "受注目標": sales_tgt,
+                "受注差額": sales - sales_tgt if sales_tgt is not None else None,
                 "受注目標比": sales / sales_tgt * 100 if sales_tgt else None,
                 "受注前年比": sales / sales_prev * 100 if sales_prev else None,
                 "座数実績": zasu, "座数目標": zasu_tgt,
+                "座数差額": zasu - zasu_tgt if zasu_tgt is not None else None,
                 "座数目標比": zasu / zasu_tgt * 100 if zasu_tgt else None,
                 "座数前年比": zasu / zasu_prev * 100 if zasu_prev else None,
             })
     period_table = pd.DataFrame(report_rows)
+
+    def _signed_gap_style(value):
+        if value is None or pd.isna(value):
+            return ""
+        return "color:#58b5ca;font-weight:700" if value >= 0 else "color:#cc2200;font-weight:700"
+
+    period_styled = period_table.style.format({
+        "受注実績": "{:,.0f}", "受注目標": "{:,.0f}", "受注差額": "{:+,.0f}",
+        "座数実績": "{:,.0f}", "座数目標": "{:,.0f}", "座数差額": "{:+,.0f}",
+        "受注目標比": "{:.1f}%", "受注前年比": "{:.1f}%",
+        "座数目標比": "{:.1f}%", "座数前年比": "{:.1f}%",
+    }, na_rep="—").applymap(
+        _signed_gap_style,
+        subset=["受注差額", "座数差額"],
+    )
     st.dataframe(
-        period_table.style.format({
-            "受注実績": "{:,.0f}", "受注目標": "{:,.0f}", "座数実績": "{:,.0f}", "座数目標": "{:,.0f}",
-            "受注目標比": "{:.1f}%", "受注前年比": "{:.1f}%", "座数目標比": "{:.1f}%", "座数前年比": "{:.1f}%",
-        }, na_rep="—"),
+        period_styled,
         use_container_width=True, hide_index=True,
     )
     st.download_button(
@@ -2832,7 +2846,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
             row[f"{prefix}_実績"] = actual
             if has_metric_target:
                 row[f"{prefix}_目標"] = target
-                row[f"{prefix}_残り"] = target - actual if actual is not None and target is not None else None
+                row[f"{prefix}_差額"] = actual - target if actual is not None and target is not None else None
                 row[f"{prefix}_目標比"] = actual / target * 100 if actual is not None and target else None
             row[f"{prefix}_前年"] = previous
             row[f"{prefix}_前年比"] = actual / previous * 100 if actual is not None and previous else None
@@ -2847,8 +2861,8 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         f"前年比 {total['受注_前年比']:.1f}%" if pd.notna(total["受注_前年比"]) else None,
     )
     m2.metric(
-        "🎯 受注残り",
-        f"{total['受注_残り']:,.0f}円" if pd.notna(total["受注_残り"]) else "—",
+        "🎯 受注目標差",
+        f"{total['受注_差額']:+,.0f}円" if pd.notna(total["受注_差額"]) else "—",
         f"目標比 {total['受注_目標比']:.1f}%" if pd.notna(total["受注_目標比"]) else None,
         delta_color="inverse",
     )
@@ -2858,8 +2872,8 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         f"前年比 {total['座数_前年比']:.1f}%" if pd.notna(total["座数_前年比"]) else None,
     )
     m4.metric(
-        "🎯 座数残り",
-        f"{total['座数_残り']:,.0f}" if pd.notna(total["座数_残り"]) else "—",
+        "🎯 座数目標差",
+        f"{total['座数_差額']:+,.0f}" if pd.notna(total["座数_差額"]) else "—",
         f"目標比 {total['座数_目標比']:.1f}%" if pd.notna(total["座数_目標比"]) else None,
         delta_color="inverse",
     )
@@ -2901,7 +2915,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         html_parts.append(f'<th class="group-start" colspan="{colspan}">{label}</th>')
     html_parts.append('</tr><tr class="sub">')
     for _, _, _, _, has_metric_target in report_metrics:
-        headers = ["目標", "実績", "残り", "目標比", "前年", "前年比"] if has_metric_target else ["実績", "前年", "前年比"]
+        headers = ["目標", "実績", "差額", "目標比", "前年", "前年比"] if has_metric_target else ["実績", "前年", "前年比"]
         for hi, header in enumerate(headers):
             html_parts.append(f'<th class="{"group-start" if hi == 0 else ""}">{header}</th>')
     html_parts.append("</tr></thead><tbody>")
@@ -2914,12 +2928,12 @@ elif st.session_state.get('current_page', 'summary') == 'report':
                     _report_fmt(row[f"{prefix}_目標"], unit),
                     _report_fmt(row[f"{prefix}_実績"], unit),
                 ]
-                gap = row[f"{prefix}_残り"]
+                gap = row[f"{prefix}_差額"]
                 if pd.isna(gap):
                     gap_html = "—"
                 else:
-                    gap_cls = "gap-neg" if gap > 0 else "gap-pos"
-                    gap_html = f'<span class="{gap_cls}">{gap:,.0f}</span>'
+                    gap_cls = "gap-pos" if gap >= 0 else "gap-neg"
+                    gap_html = f'<span class="{gap_cls}">{gap:+,.0f}</span>'
                 cells = vals + [gap_html, _report_rate(row[f"{prefix}_目標比"]),
                                 _report_fmt(row[f"{prefix}_前年"], unit), _report_rate(row[f"{prefix}_前年比"])]
             else:
@@ -2960,7 +2974,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         f"実績期間：{start_date:%Y/%m/%d}〜{end_date:%Y/%m/%d}\n"
         f"目標期間：{target_start_date:%Y/%m/%d}〜{target_end_date:%Y/%m/%d}\n"
         f"受注実績：{total['受注_実績']:,.0f}円"
-        + (f"／残り {total['受注_残り']:,.0f}円" if pd.notna(total['受注_残り']) else "")
+        + (f"／目標差 {total['受注_差額']:+,.0f}円" if pd.notna(total['受注_差額']) else "")
         + (f"（目標比 {total['受注_目標比']:.1f}%／前年比 {total['受注_前年比']:.1f}%）" if pd.notna(total['受注_目標比']) and pd.notna(total['受注_前年比']) else "")
         + f"\n座数：{total['座数_実績']:,.0f}"
         + (f"（目標比 {total['座数_目標比']:.1f}%／前年比 {total['座数_前年比']:.1f}%）" if pd.notna(total['座数_目標比']) and pd.notna(total['座数_前年比']) else "")
