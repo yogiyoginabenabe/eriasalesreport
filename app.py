@@ -2678,7 +2678,15 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         st.stop()
     hist["日付"] = pd.to_datetime(hist["日付"])
     max_hist_date = hist["日付"].max().date()
-    agencies = sorted([a for a in hist["代行会社"].dropna().unique() if str(a).strip()])
+    # 会社別レポートの対象は、過去履歴ではなく現在の店舗マスタを正本にする。
+    # 閉店店舗が履歴に残っていても、マスタ対象外なら会社・店舗一覧へ出さない。
+    active_master = master_df.copy()
+    active_master["店舗名"] = active_master["店舗名"].fillna("").astype(str).str.strip()
+    active_master["代行会社"] = active_master["代行会社"].fillna("").astype(str).str.strip()
+    active_master = active_master[
+        active_master["店舗名"].ne("") & active_master["代行会社"].ne("")
+    ].copy()
+    agencies = sorted(active_master["代行会社"].unique())
 
     st.markdown("### 📝 ストアマネージャー日報")
     daily_report_file = st.file_uploader(
@@ -2757,7 +2765,9 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         end_date = dc2.date_input("終了日", value=report_date, key="report_end")
         target_start_date, target_end_date = start_date, end_date
 
-    agency_stores = sorted(hist[hist["代行会社"] == agency]["店舗名"].dropna().unique())
+    agency_stores = sorted(
+        active_master.loc[active_master["代行会社"] == agency, "店舗名"].unique()
+    )
 
     # 日報の対象期間：直近の内容に反応するため曜日ごとに固定
     if report_date.weekday() == 5:  # 土曜：直前の月〜金（ただし月初より前は含めない）
