@@ -1142,7 +1142,7 @@ elif _page == 'master': _active_tab = tab_master
 else: _active_tab = tab_overview
 
 
-def _trigger_sales_backfill(start_date, end_date, summary_period=None):
+def _trigger_sales_backfill(start_date, end_date, summary_period=None, daily_date=None):
     """画面からGitHub Actionsの取得処理を開始する。認証情報はGitHub側だけで使用する。"""
     import urllib.error
     import urllib.request
@@ -1154,6 +1154,8 @@ def _trigger_sales_backfill(start_date, end_date, summary_period=None):
         "store_report_date": "", "backfill_start_month": "", "backfill_end_month": "",
         "summary_start": "", "summary_end": "", "summary_period": "",
     }
+    if daily_date:
+        inputs["store_report_date"] = daily_date.strftime("%Y%m%d")
     if summary_period:
         inputs.update({
             "summary_start": start_date.strftime("%Y%m%d"),
@@ -1552,10 +1554,19 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                     try:
                         if _summary_request_start > _summary_request_end:
                             raise ValueError("未来の期間はまだ取得できません")
-                        _trigger_sales_backfill(_summary_request_start, _summary_request_end, _summary_period_code)
+                        _trigger_sales_backfill(
+                            _summary_request_start,
+                            _summary_request_end,
+                            _summary_period_code,
+                            daily_date=(
+                                _summary_yesterday
+                                if sel_year == _jst_today().year and sel_month_num == _jst_today().month
+                                else None
+                            ),
+                        )
                         st.session_state["_summary_fetch_started"] = (
-                            f"{_summary_request_start:%Y/%m/%d}〜{_summary_request_end:%Y/%m/%d}の高速取得を開始しました。"
-                            "通常は数分かかります。完了後に「取得結果を再読込」を押してください。"
+                            f"{_summary_request_start:%Y/%m/%d}〜{_summary_request_end:%Y/%m/%d}の取得を開始しました。"
+                            "当月は前日の日別実績も同時に更新します。完了後に「取得結果を再読込」を押してください。"
                         )
                     except Exception as exc:
                         st.error(str(exc))
