@@ -2854,28 +2854,43 @@ elif st.session_state.get('current_page', 'summary') == 'report':
 
     report_df = pd.DataFrame(rr).replace({None: float("nan")})
     total = report_df.iloc[0]
+
+    def _target_gap_card(column, label, value, unit, ratio):
+        if value is None or pd.isna(value):
+            value_text, color = "—", "#595959"
+        else:
+            value_text = f"{value:+,.0f}{unit}"
+            color = "#58b5ca" if value >= 0 else "#cc2200"
+        ratio_text = f"目標比 {ratio:.1f}%" if ratio is not None and pd.notna(ratio) else "目標なし"
+        column.markdown(
+            f"""
+            <div style="border:1px solid #d7ecef;border-radius:12px;padding:17px 16px;min-height:110px;background:#fff">
+              <div style="font-size:.86rem;color:#63888d;margin-bottom:5px">{label}</div>
+              <div style="font-size:1.45rem;font-weight:800;color:{color}">{value_text}</div>
+              <div style="font-size:.72rem;color:{color};margin-top:5px">{ratio_text}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
     m1, m2, m3, m4 = st.columns(4)
     m1.metric(
         "💴 受注実績",
         f"{total['受注_実績']:,.0f}円" if pd.notna(total["受注_実績"]) else "—",
         f"前年比 {total['受注_前年比']:.1f}%" if pd.notna(total["受注_前年比"]) else None,
     )
-    m2.metric(
-        "🎯 受注目標差",
-        f"{total['受注_差額']:+,.0f}円" if pd.notna(total["受注_差額"]) else "—",
-        f"目標比 {total['受注_目標比']:.1f}%" if pd.notna(total["受注_目標比"]) else None,
-        delta_color="inverse",
+    _target_gap_card(
+        m2, "🎯 受注目標差",
+        total["受注_差額"], "円", total["受注_目標比"],
     )
     m3.metric(
         "🪑 座数",
         f"{total['座数_実績']:,.0f}" if pd.notna(total["座数_実績"]) else "—",
         f"前年比 {total['座数_前年比']:.1f}%" if pd.notna(total["座数_前年比"]) else None,
     )
-    m4.metric(
-        "🎯 座数目標差",
-        f"{total['座数_差額']:+,.0f}" if pd.notna(total["座数_差額"]) else "—",
-        f"目標比 {total['座数_目標比']:.1f}%" if pd.notna(total["座数_目標比"]) else None,
-        delta_color="inverse",
+    _target_gap_card(
+        m4, "🎯 座数目標差",
+        total["座数_差額"], "", total["座数_目標比"],
     )
 
     st.markdown("### 📋 キャプチャ用サマリー")
