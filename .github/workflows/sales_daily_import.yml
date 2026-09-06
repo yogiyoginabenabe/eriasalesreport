@@ -2,7 +2,7 @@ name: Yogibo store report daily import
 
 on:
   schedule:
-    - cron: "30 13 * * *" # 22:30 JST
+    - cron: "0 22 * * *" # 07:00 JST（前日分を取得）
   workflow_dispatch:
     inputs:
       store_report_date:
@@ -86,7 +86,8 @@ jobs:
           elif [ -n "${{ inputs.store_report_date }}" ]; then
             python scripts/store_report_daily.py --date "${{ inputs.store_report_date }}"
           else
-            python scripts/store_report_daily.py
+            # 定期実行は翌朝に前日分を取得する。営業中の未確定CSVを避ける。
+            python scripts/store_report_daily.py --yesterday
           fi
 
       - name: Upload diagnostics on failure
