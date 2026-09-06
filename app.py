@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 import os
+import calendar
 import datetime as _datetime_global
 from zoneinfo import ZoneInfo
 
@@ -2721,7 +2722,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         # 「昨日までの進捗差」ではなく「月間達成まであといくら」を示す。
         month_start = report_date.replace(day=1)
         month_end = report_date.replace(
-            day=cal_mod.monthrange(report_date.year, report_date.month)[1]
+            day=calendar.monthrange(report_date.year, report_date.month)[1]
         )
         start_date = month_start
         end_date = report_date - pd.Timedelta(days=1)
