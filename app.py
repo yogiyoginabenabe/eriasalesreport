@@ -311,6 +311,7 @@ STORE_DATA_SHEET_ID = "1eNpYmFkubjtFEwKgnpzFp2DUGoMBYJklDCy1gGOa5Rw"
 STORE_DATA_TAB = "店舗データ"
 STORE_AM_NAMES = {"渡邊_A", "渡邊_B"}
 
+@st.cache_data(ttl=900, show_spinner=False)
 def load_master():
     """店舗データから渡邊_A/BかつOPENの店舗を取得する。"""
     try:
@@ -805,9 +806,10 @@ if st.session_state.get('_targets_index_hash') != _targets_hash:
 # ─────────────────────────────────────────────
 # セッション初期化
 # ─────────────────────────────────────────────
-# 店舗マスタは保存済み一覧を表示し、Google Sheetsからの取得はボタン操作時のみ
+# セッション開始時はGoogle Sheetsの店舗マスタを正本として読み込む。
+# Streamlitが休止・再起動してローカル一時ファイルが消えても、古い一覧へ戻さない。
 if "stores" not in st.session_state:
-    st.session_state.stores = load_saved_master()
+    st.session_state.stores = load_master()
 if "targets" not in st.session_state:
     st.session_state.targets = load_targets()
 
@@ -3346,6 +3348,7 @@ elif st.session_state.get('current_page', 'summary') == 'master':
 
     if st.button("🔄 最新情報を取得", type="primary", key="refresh_store_master"):
         st.session_state.pop("_store_master_error", None)
+        load_master.clear()
         with st.spinner("店舗マスタの最新情報を取得しています..."):
             refreshed_stores = load_master()
         if st.session_state.get("_store_master_error"):
