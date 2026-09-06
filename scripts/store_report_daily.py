@@ -384,7 +384,7 @@ def main() -> None:
                         if not matching_rows:
                             returned_dates = sorted({str(row.get("日付", "")).strip() for row in rows})
                             raise report_api.NoDataYetError(
-                                f"指定日 {expected_date} は未確定です（CSV内の日付: {cad28{returned_dates[:3]}）"
+                                f"指定日 {expected_date} は未確定です（CSV内の日付: {{returned_dates[:3]}）"
                             )
                         rows = matching_rows
                     all_csv_rows.extend(rows)
