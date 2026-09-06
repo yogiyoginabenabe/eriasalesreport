@@ -2,7 +2,12 @@ name: Yogibo store report daily import
 
 on:
   schedule:
-    - cron: "0 22 * * *" # 07:00 JST（前日分を取得）
+    # 店舗分析側の確定時刻にばらつきがあるため、朝に再試行する。
+    # 同じ店舗・日付・指標はupsertされるので重複しない。
+    - cron: "0 22 * * *" # 07:00 JST
+    - cron: "0 23 * * *" # 08:00 JST
+    - cron: "0 0 * * *"  # 09:00 JST
+    - cron: "0 1 * * *"  # 10:00 JST
   workflow_dispatch:
     inputs:
       store_report_date:
