@@ -1270,7 +1270,8 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
             if len(parts) == 2:
                 try:
                     _fd = pd.to_datetime(parts[1])
-                    if _fd.year == _this_year and _fd.month == _this_month and _fd.date() <= _yesterday:
+                    # TOPの実績は昨日まで（MTD）だが、目標は月間全体を使う。
+                    if _fd.year == _this_year and _fd.month == _this_month:
                         _filtered_targets[_fk] = _fv
                 except: pass
 
@@ -1311,7 +1312,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                     )
                 if _tgt_total > 0:
                     _ach = _val / _tgt_total * 100
-                    _delta_str = f'目標比MTD {_ach:.1f}%'
+                    _delta_str = f'月間目標比 {_ach:.1f}%'
                     _delta_color = 'normal' if _ach >= 100 else ('off' if _ach >= 90 else 'inverse')
             if _delta_str is None and not _top_prev.empty:
                 _sub_p = _top_prev[_top_prev['指標']==_metric]['値']
