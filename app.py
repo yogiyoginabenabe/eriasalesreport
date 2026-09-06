@@ -2718,16 +2718,25 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         start_date = end_date - pd.Timedelta(days=6)
         target_start_date, target_end_date = start_date, end_date
     elif report_type.startswith(("土曜", "日曜")):
-        # 週末レポートは当月の前日までを実績、月末までの月間目標を基準にする。
-        # 「昨日までの進捗差」ではなく「月間達成まであといくら」を示す。
+        # 基準日が属する月内のW1・W2…を自動判定する。
+        # W1は月初〜最初の日曜、以降は月曜〜日曜。実績は前日まで、
+        # 目標はその週の最終日までとして「今週あといくら」を示す。
         month_start = report_date.replace(day=1)
         month_end = report_date.replace(
             day=calendar.monthrange(report_date.year, report_date.month)[1]
         )
-        start_date = month_start
+        week_start = max(
+            report_date - pd.Timedelta(days=report_date.weekday()),
+            month_start,
+        )
+        week_end = min(
+            week_start + pd.Timedelta(days=(6 - week_start.weekday())),
+            month_end,
+        )
+        start_date = week_start
         end_date = report_date - pd.Timedelta(days=1)
-        target_start_date = month_start
-        target_end_date = month_end
+        target_start_date = week_start
+        target_end_date = week_end
     else:
         dc1, dc2 = st.columns(2)
         start_date = dc1.date_input("開始日", value=report_date.replace(day=1), key="report_start")
@@ -2856,7 +2865,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
     )
 
     st.markdown("### 📋 キャプチャ用サマリー")
-    st.caption("週末レポートは前日までの実績と月間目標を比較し、月末までの残額・残座数を表示します。全項目がAI生成するTUNAG投稿文にも連動します。")
+    st.caption("基準日から対象週（W1・W2…）を自動判定し、前日までの実績と週目標を比較して、週末までの残額・残座数を表示します。全項目がAI生成するTUNAG投稿文にも連動します。")
 
     def _report_fmt(value, unit):
         if value is None or pd.isna(value):
