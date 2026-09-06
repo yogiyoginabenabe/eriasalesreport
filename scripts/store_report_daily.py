@@ -372,6 +372,21 @@ def main() -> None:
                     rows = report_api.parse_report_csv(raw)
                     if args.summary_start:
                         rows = [(start_ymd, end_ymd, row) for row in rows]
+                    else:
+                        # 日別CSVは、店舗分析側の集計が未確定だと指定日の代わりに
+                        # 直前日の行を返すことがある。指定日と一致する行だけを保存し、
+                        # 一致しない場合は次回の定期実行へ回す。
+                        expected_date = datetime.strptime(start_ymd, "%Y%m%d").strftime("%Y-%m-%d")
+                        matching_rows = [
+                            row for row in rows
+                            if normalize_date(row.get("日付", ""), start_ymd) == expected_date
+                        ]
+                        if not matching_rows:
+                            returned_dates = sorted({str(row.get("日付", "")).strip() for row in rows})
+                            raise report_api.NoDataYetError(
+                                f"指定日 {expected_date} は未確定です（CSV内の日付: {cad28{returned_dates[:3]}）"
+                            )
+                        rows = matching_rows
                     all_csv_rows.extend(rows)
                     log(f"CSV取得完了: {len(rows)}行")
                 except report_api.NoDataYetError as exc:
