@@ -2725,9 +2725,9 @@ elif st.session_state.get('current_page', 'summary') == 'report':
             month_start,
         )
         end_date = report_date - pd.Timedelta(days=1)
-        month_end = (
-            month_start + pd.offsets.MonthEnd(0)
-        ).date()
+        month_end = report_date.replace(
+            day=cal_mod.monthrange(report_date.year, report_date.month)[1]
+        )
         target_start_date = start_date
         target_end_date = min(
             start_date + pd.Timedelta(days=6),
