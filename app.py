@@ -2712,18 +2712,32 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         agency = st.selectbox("代行会社", agencies, key="report_agency")
 
     if report_type.startswith("月曜"):
+        # 月曜は終了した前週（月〜日）を確定比較する。
         end_date = report_date - pd.Timedelta(days=1)
         start_date = end_date - pd.Timedelta(days=6)
-    elif report_type.startswith("土曜"):
-        start_date = report_date.replace(day=1)
+        target_start_date, target_end_date = start_date, end_date
+    elif report_type.startswith(("土曜", "日曜")):
+        # 週末レポートは今週の前日までを実績、その週の日曜までを目標にする。
+        # 月初が週の途中なら、前月の日付は含めない。
+        month_start = report_date.replace(day=1)
+        start_date = max(
+            report_date - pd.Timedelta(days=report_date.weekday()),
+            month_start,
+        )
         end_date = report_date - pd.Timedelta(days=1)
-    elif report_type.startswith("日曜"):
-        start_date = report_date.replace(day=1)
-        end_date = report_date - pd.Timedelta(days=1)
+        month_end = (
+            month_start + pd.offsets.MonthEnd(0)
+        ).date()
+        target_start_date = start_date
+        target_end_date = min(
+            start_date + pd.Timedelta(days=6),
+            month_end,
+        )
     else:
         dc1, dc2 = st.columns(2)
         start_date = dc1.date_input("開始日", value=report_date.replace(day=1), key="report_start")
         end_date = dc2.date_input("終了日", value=report_date, key="report_end")
+        target_start_date, target_end_date = start_date, end_date
 
     agency_stores = sorted(hist[hist["代行会社"] == agency]["店舗名"].dropna().unique())
 
@@ -2777,10 +2791,14 @@ elif st.session_state.get('current_page', 'summary') == 'report':
     prev_end = end_date - pd.Timedelta(weeks=52)
     prev = hist[(hist["代行会社"] == agency) & (hist["日付"].dt.date >= prev_start) & (hist["日付"].dt.date <= prev_end)].copy()
     tgt = tgt_hist[(tgt_hist["店舗名"].isin(agency_stores)) &
-                   (pd.to_datetime(tgt_hist["日付"]).dt.date >= start_date) &
-                   (pd.to_datetime(tgt_hist["日付"]).dt.date <= end_date)].copy() if not tgt_hist.empty else _empty_history()
+                   (pd.to_datetime(tgt_hist["日付"]).dt.date >= target_start_date) &
+                   (pd.to_datetime(tgt_hist["日付"]).dt.date <= target_end_date)].copy() if not tgt_hist.empty else _empty_history()
 
-    st.caption(f"📅 対象期間：{start_date:%Y/%m/%d}〜{end_date:%Y/%m/%d}　｜　{agency}")
+    st.caption(
+        f"📅 実績：{start_date:%Y/%m/%d}〜{end_date:%Y/%m/%d}"
+        f"　｜　目標：{target_start_date:%Y/%m/%d}〜{target_end_date:%Y/%m/%d}"
+        f"　｜　{agency}"
+    )
     if cur.empty:
         st.warning("この期間の実績データはまだ蓄積されていません。")
         st.stop()
@@ -2810,7 +2828,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
             row[f"{prefix}_実績"] = actual
             if has_metric_target:
                 row[f"{prefix}_目標"] = target
-                row[f"{prefix}_Gap"] = actual - target if actual is not None and target is not None else None
+                row[f"{prefix}_残り"] = max(target - actual, 0) if actual is not None and target is not None else None
                 row[f"{prefix}_目標比"] = actual / target * 100 if actual is not None and target else None
             row[f"{prefix}_前年"] = previous
             row[f"{prefix}_前年比"] = actual / previous * 100 if actual is not None and previous else None
@@ -2824,13 +2842,23 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         f"{total['受注_実績']:,.0f}円" if pd.notna(total["受注_実績"]) else "—",
         f"前年比 {total['受注_前年比']:.1f}%" if pd.notna(total["受注_前年比"]) else None,
     )
-    m2.metric("🎯 受注目標比", f"{total['受注_目標比']:.1f}%" if pd.notna(total["受注_目標比"]) else "—")
+    m2.metric(
+        "🎯 受注残り",
+        f"{total['受注_残り']:,.0f}円" if pd.notna(total["受注_残り"]) else "—",
+        f"目標比 {total['受注_目標比']:.1f}%" if pd.notna(total["受注_目標比"]) else None,
+        delta_color="inverse",
+    )
     m3.metric(
         "🪑 座数",
         f"{total['座数_実績']:,.0f}" if pd.notna(total["座数_実績"]) else "—",
         f"前年比 {total['座数_前年比']:.1f}%" if pd.notna(total["座数_前年比"]) else None,
     )
-    m4.metric("🎯 座数目標比", f"{total['座数_目標比']:.1f}%" if pd.notna(total["座数_目標比"]) else "—")
+    m4.metric(
+        "🎯 座数残り",
+        f"{total['座数_残り']:,.0f}" if pd.notna(total["座数_残り"]) else "—",
+        f"目標比 {total['座数_目標比']:.1f}%" if pd.notna(total["座数_目標比"]) else None,
+        delta_color="inverse",
+    )
 
     st.markdown("### 📋 キャプチャ用サマリー")
     st.caption("受注金額・座数・客数・CVR・客単価・品数の全項目が、AI生成するTUNAG投稿文にも連動します。")
@@ -2869,7 +2897,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         html_parts.append(f'<th class="group-start" colspan="{colspan}">{label}</th>')
     html_parts.append('</tr><tr class="sub">')
     for _, _, _, _, has_metric_target in report_metrics:
-        headers = ["目標", "実績", "Gap", "目標比", "前年", "前年比"] if has_metric_target else ["実績", "前年", "前年比"]
+        headers = ["目標", "実績", "残り", "目標比", "前年", "前年比"] if has_metric_target else ["実績", "前年", "前年比"]
         for hi, header in enumerate(headers):
             html_parts.append(f'<th class="{"group-start" if hi == 0 else ""}">{header}</th>')
     html_parts.append("</tr></thead><tbody>")
@@ -2882,12 +2910,12 @@ elif st.session_state.get('current_page', 'summary') == 'report':
                     _report_fmt(row[f"{prefix}_目標"], unit),
                     _report_fmt(row[f"{prefix}_実績"], unit),
                 ]
-                gap = row[f"{prefix}_Gap"]
+                gap = row[f"{prefix}_残り"]
                 if pd.isna(gap):
                     gap_html = "—"
                 else:
-                    gap_cls = "gap-pos" if gap >= 0 else "gap-neg"
-                    gap_html = f'<span class="{gap_cls}">{gap:+,.0f}</span>'
+                    gap_cls = "gap-neg" if gap > 0 else "gap-pos"
+                    gap_html = f'<span class="{gap_cls}">{gap:,.0f}</span>'
                 cells = vals + [gap_html, _report_rate(row[f"{prefix}_目標比"]),
                                 _report_fmt(row[f"{prefix}_前年"], unit), _report_rate(row[f"{prefix}_前年比"])]
             else:
@@ -2925,8 +2953,10 @@ elif st.session_state.get('current_page', 'summary') == 'report':
     heading = report_type.split("：", 1)[-1]
     tunag_text = (
         f"【{agency}｜{heading}】\n"
-        f"対象期間：{start_date:%Y/%m/%d}〜{end_date:%Y/%m/%d}\n"
+        f"実績期間：{start_date:%Y/%m/%d}〜{end_date:%Y/%m/%d}\n"
+        f"目標期間：{target_start_date:%Y/%m/%d}〜{target_end_date:%Y/%m/%d}\n"
         f"受注実績：{total['受注_実績']:,.0f}円"
+        + (f"／残り {total['受注_残り']:,.0f}円" if pd.notna(total['受注_残り']) else "")
         + (f"（目標比 {total['受注_目標比']:.1f}%／前年比 {total['受注_前年比']:.1f}%）" if pd.notna(total['受注_目標比']) and pd.notna(total['受注_前年比']) else "")
         + f"\n座数：{total['座数_実績']:,.0f}"
         + (f"（目標比 {total['座数_目標比']:.1f}%／前年比 {total['座数_前年比']:.1f}%）" if pd.notna(total['座数_目標比']) and pd.notna(total['座数_前年比']) else "")
@@ -3005,8 +3035,10 @@ elif st.session_state.get('current_page', 'summary') == 'report':
 {report_type}
 【対象会社】
 {agency}
-【売上対象期間】
+【実績対象期間】
 {start_date:%Y/%m/%d}〜{end_date:%Y/%m/%d}
+【目標対象期間】
+{target_start_date:%Y/%m/%d}〜{target_end_date:%Y/%m/%d}
 【売上サマリー】
 {report_df.to_csv(index=False)}
 【選定済み日報】
