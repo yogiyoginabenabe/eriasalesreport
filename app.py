@@ -1568,7 +1568,9 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
             _summary_request_start, _summary_request_end = sel_week_range
             _summary_period_code = "w"
         _summary_yesterday = _jst_today() - datetime.timedelta(days=1)
-        _summary_request_end = min(_summary_request_end, _summary_yesterday)
+        # 売上管理表の比較期間は、当年のデータ最終日では切らない。
+        # 月間累計は前年同月全体、週選択は52週前の同週全体を比較する。
+        # 当年実績は日別DBに存在する日だけが自然に集計される。
         _summary_period_label = "月別" if _summary_period_code == "m" else "週別"
         fetch_col, refresh_col, note_col = st.columns([1.4, 1.2, 4])
         with fetch_col:
@@ -1576,6 +1578,8 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                 with st.spinner("取得処理を開始しています..."):
                     try:
                         if _summary_request_start > _summary_request_end:
+                            raise ValueError("期間の指定が正しくありません")
+                        if _summary_request_start > _summary_yesterday:
                             raise ValueError("未来の期間はまだ取得できません")
                         _trigger_sales_backfill(
                             _summary_request_start,
@@ -1601,7 +1605,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                 st.session_state.pop("_summary_fetch_started", None)
                 st.rerun()
         with note_col:
-            st.caption("当月実績は毎朝の日別DB、前年同月は月別CSV、前年同週は52週前の週別CSVを使います。再取得しても重複しません。")
+            st.caption("月間累計の前年欄は前年同月全体、W1などの前年欄は52週前の同週全体です。TOPのMTDとは比較範囲が異なります。")
         if st.session_state.get("_summary_fetch_started"):
             st.success(st.session_state["_summary_fetch_started"])
 
