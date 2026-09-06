@@ -137,7 +137,7 @@ def to_history_rows(csv_rows, target_stores, fallback_ymd):
     return result
 
 
-def upsert_history(client, incoming_rows) -> tuple[int, int]:
+def upsert_history(client, incoming_rows, keep_month=None) -> tuple[int, int]:
     book = client.open_by_key(SALES_DB_SHEET_ID)
     try:
         sheet = book.worksheet(HISTORY_TAB)
@@ -149,6 +149,25 @@ def upsert_history(client, incoming_rows) -> tuple[int, int]:
         sheet.clear()
         sheet.update(range_name="A1", values=[HISTORY_COLUMNS])
         values = [HISTORY_COLUMNS]
+
+    # 通常の日次自動取得では当月分だけを保持する。月が替わった最初の取得時に
+    # 前月以前の日別行をまとめて削除し、DBが肥大化しないようにする。
+    if keep_month:
+        retained = [HISTORY_COLUMNS]
+        for row in values[1:]:
+            padded = (list(row) + [""] * len(HISTORY_COLUMNS))[:len(HISTORY_COLUMNS)]
+            if str(padded[4]).startswith(keep_month):
+                retained.append(padded)
+        removed = max(0, len(values) - len(retained))
+        if removed:
+            sheet.clear()
+            sheet.update(
+                range_name=f"A1:G{len(retained)}",
+                values=retained,
+                value_input_option="RAW",
+            )
+            values = retained
+            log(f"月替わり整理: {keep_month}以外の日別履歴を{removed}行削除")
 
     # 既存行番号を索引化し、再実行時は該当6行だけ更新する。
     # 全履歴のclear→再書き込みを避けるため、データが年単位で増えても安全。
@@ -293,6 +312,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--date", help="対象日 YYYYMMDD。省略時は日本時間の当日")
+    mode.add_argument("--yesterday", action="store_true", help="日本時間の前日を取得（定期実行用）")
     mode.add_argument("--start-month", help="過去一括取得の開始月 YYYYMM")
     mode.add_argument("--summary-start", help="高速サマリー取得の開始日 YYYYMMDD")
     parser.add_argument("--end-month", help="過去一括取得の終了月 YYYYMM（省略時は開始月と同じ）")
@@ -316,7 +336,10 @@ def main() -> None:
         periods = month_ranges(args.start_month, args.end_month or args.start_month)
         log(f"過去一括取得: {periods[0][0]}〜{periods[-1][1]}（{len(periods)}か月）")
     else:
-        ymd = args.date or datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y%m%d")
+        if args.yesterday:
+            ymd = (datetime.now(ZoneInfo("Asia/Tokyo")).date() - timedelta(days=1)).strftime("%Y%m%d")
+        else:
+            ymd = args.date or datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y%m%d")
         datetime.strptime(ymd, "%Y%m%d")
         periods = [(ymd, ymd)]
         log(f"取得対象日: {ymd}")
@@ -379,7 +402,10 @@ def main() -> None:
         log(f"高速サマリー保存完了: 新規 {inserted}行 / 更新 {updated}行")
     else:
         history_rows = to_history_rows(all_csv_rows, target_stores, periods[0][0])
-        inserted, updated = upsert_history(client, history_rows)
+        # 定期の前日取得だけは当月の日別データに限定する。
+        # 手動の過去取得は互換性のため既存動作を維持する。
+        keep_month = periods[0][0][:4] + "-" + periods[0][0][4:6] if args.yesterday else None
+        inserted, updated = upsert_history(client, history_rows, keep_month=keep_month)
         store_days = len({(row[1], row[4]) for row in history_rows})
         log(f"保存完了: 店舗日数 {store_days} / 新規 {inserted}行 / 更新 {updated}行")
 
