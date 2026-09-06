@@ -2832,7 +2832,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
             row[f"{prefix}_実績"] = actual
             if has_metric_target:
                 row[f"{prefix}_目標"] = target
-                row[f"{prefix}_残り"] = max(target - actual, 0) if actual is not None and target is not None else None
+                row[f"{prefix}_残り"] = target - actual if actual is not None and target is not None else None
                 row[f"{prefix}_目標比"] = actual / target * 100 if actual is not None and target else None
             row[f"{prefix}_前年"] = previous
             row[f"{prefix}_前年比"] = actual / previous * 100 if actual is not None and previous else None
