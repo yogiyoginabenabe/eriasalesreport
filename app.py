@@ -560,8 +560,15 @@ def _load_summary_cache_from_db():
     if not values or len(values) < 2 or values[0] != columns:
         return pd.DataFrame(columns=columns)
     df = pd.DataFrame(values[1:], columns=columns)
+    # Google Sheets側で日付の表示形式が変わっても、期間キーを同じ形式で照合する。
+    df["集計単位"] = df["集計単位"].astype(str).str.strip().str.lower()
+    for col in ["開始日", "終了日"]:
+        parsed = pd.to_datetime(df[col].astype(str).str.strip(), errors="coerce")
+        df[col] = parsed.dt.strftime("%Y-%m-%d")
+    for col in ["店舗名", "店舗コード", "代行会社", "エリア", "指標"]:
+        df[col] = df[col].astype(str).str.strip()
     df["値"] = pd.to_numeric(df["値"], errors="coerce")
-    return df.dropna(subset=["指標", "値"])
+    return df.dropna(subset=["開始日", "終了日", "指標", "値"])
 
 def load_history(path):
     # 実績履歴はGoogle Sheetsを正本として読み込む
@@ -1721,13 +1728,12 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                     filter_month_days.add(f"{int(parts[1]):02d}/{int(parts[2]):02d}")
             ov_long_now = _long_now_full[_long_now_full["月日"].isin(filter_month_days)] if filter_month_days else _long_now_full
     
+        # 売上管理表の前年比較は、選択期間用に取得した月別・週別キャッシュだけを使う。
+        # 日別DBへ戻すと「前年同月全体」のはずが前年MTDになってしまうため使用しない。
+        _upload_has_prev = ov_has_prev
         ov_long_prev = pd.DataFrame()
-        if _summary_using_db:
-            _selected_dates = pd.to_datetime(pd.Series(date_filter), errors="coerce").dropna()
-            _prev_date_keys = set((_selected_dates - pd.Timedelta(weeks=52)).dt.strftime("%Y/%m/%d"))
-            ov_long_prev = _summary_hist_long[_summary_hist_long["日付_原本"].isin(_prev_date_keys)].copy()
-            ov_has_prev = not ov_long_prev.empty
-        elif ov_has_prev and not _long_prev_cached.empty:
+        ov_has_prev = False
+        if not _summary_using_db and _upload_has_prev and not _long_prev_cached.empty:
             if sel_week_range is None:
                 # 月間累計 → 日合わせ（前年同月の同日付）
                 prev_month_days = {
@@ -1772,6 +1778,16 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
         if not _summary_cache_prev.empty:
             ov_long_prev = _summary_cache_to_long(_summary_cache_prev)
             ov_has_prev = True
+        elif _summary_using_db:
+            st.warning(
+                f"比較用データ（{_prev_req_start:%Y/%m/%d}〜{_prev_req_end:%Y/%m/%d}）が未取得です。"
+                f"「{_summary_period_label}データを取得」を押し、完了後に再読込してください。"
+            )
+
+        st.caption(
+            f"前年欄の比較期間: {_prev_req_start:%Y/%m/%d}〜{_prev_req_end:%Y/%m/%d}"
+            + ("（月別・週別取得データ）" if ov_has_prev else "（未取得）")
+        )
 
         # 目標：期間内の日別目標を合計
         # 目標DataFrameをキャッシュ（get_store_target_period内で毎回CSV読むのを防ぐ）
