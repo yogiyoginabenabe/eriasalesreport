@@ -40,6 +40,16 @@ on:
         required: false
         default: ""
         type: string
+      manager_report_start:
+        description: "日報の取得開始日（YYYYMMDD）"
+        required: false
+        default: ""
+        type: string
+      manager_report_end:
+        description: "日報の取得終了日（YYYYMMDD）"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -73,6 +83,7 @@ jobs:
           python -m playwright install --with-deps chromium
 
       - name: Download and upsert daily sales
+        if: ${{ github.event_name == 'schedule' || inputs.manager_report_start == '' }}
         shell: bash
         run: |
           # サマリー画面からの実行では、比較用の週別・月別データを取得する。
@@ -100,10 +111,14 @@ jobs:
           fi
 
       - name: Download and upsert manager reports
-        if: ${{ github.event_name == 'schedule' || (inputs.summary_start == '' && inputs.backfill_start_month == '') }}
+        if: ${{ github.event_name == 'schedule' || inputs.manager_report_start != '' || (inputs.summary_start == '' && inputs.backfill_start_month == '') }}
         shell: bash
         run: |
-          if [ -n "${{ inputs.store_report_date }}" ]; then
+          if [ -n "${{ inputs.manager_report_start }}" ]; then
+            python scripts/manager_report_daily.py \
+              --start-date "${{ inputs.manager_report_start }}" \
+              --end-date "${{ inputs.manager_report_end }}"
+          elif [ -n "${{ inputs.store_report_date }}" ]; then
             python scripts/manager_report_daily.py --date "${{ inputs.store_report_date }}"
           else
             python scripts/manager_report_daily.py
