@@ -99,6 +99,16 @@ jobs:
             python scripts/store_report_daily.py --recent-days 3
           fi
 
+      - name: Download and upsert manager reports
+        if: ${{ github.event_name == 'schedule' || (inputs.summary_start == '' && inputs.backfill_start_month == '') }}
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.store_report_date }}" ]; then
+            python scripts/manager_report_daily.py --date "${{ inputs.store_report_date }}"
+          else
+            python scripts/manager_report_daily.py
+          fi
+
       - name: Upload diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
