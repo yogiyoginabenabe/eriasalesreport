@@ -340,14 +340,9 @@ def main() -> None:
         if args.recent_days < 1 or args.recent_days > 7:
             parser.error("--recent-daysは1〜7で指定してください")
         yesterday = datetime.now(ZoneInfo("Asia/Tokyo")).date() - timedelta(days=1)
-        first_day = yesterday - timedelta(days=args.recent_days - 1)
-        periods = []
-        cursor = first_day
-        while cursor <= yesterday:
-            ymd = cursor.strftime("%Y%m%d")
-            periods.append((ymd, ymd))
-            cursor += timedelta(days=1)
-        log(f"直近日別再確認: {periods[0][0]}〜{periods[-1][1]}（{len(periods)}日）")
+        month_start = yesterday.replace(day=1)
+        periods = [(month_start.strftime("%Y%m%d"), yesterday.strftime("%Y%m%d"))]
+        log(f"当月日別再取得: {periods[0][0]}〜{periods[0][1]}")
     else:
         if args.yesterday:
             ymd = (datetime.now(ZoneInfo("Asia/Tokyo")).date() - timedelta(days=1)).strftime("%Y%m%d")
@@ -389,15 +384,19 @@ def main() -> None:
                         # 日別CSVは、店舗分析側の集計が未確定だと指定日の代わりに
                         # 直前日の行を返すことがある。指定日と一致する行だけを保存し、
                         # 一致しない場合は次回の定期実行へ回す。
-                        expected_date = datetime.strptime(start_ymd, "%Y%m%d").strftime("%Y-%m-%d")
+                        expected_start = datetime.strptime(start_ymd, "%Y%m%d").strftime("%Y-%m-%d")
+                        expected_end = datetime.strptime(end_ymd, "%Y%m%d").strftime("%Y-%m-%d")
                         matching_rows = [
                             row for row in rows
-                            if normalize_date(row.get("日付", ""), start_ymd) == expected_date
+                            if expected_start <= normalize_date(row.get("日付", ""), start_ymd) <= expected_end
                         ]
-                        if not matching_rows:
+                        returned_dates_normalized = {
+                            normalize_date(row.get("日付", ""), start_ymd) for row in matching_rows
+                        }
+                        if not matching_rows or expected_end not in returned_dates_normalized:
                             returned_dates = sorted({str(row.get("日付", "")).strip() for row in rows})
                             raise report_api.NoDataYetError(
-                                f"指定日 {expected_date} は未確定です（CSV内の日付: {returned_dates[:3]}）"
+                                f"指定期間の最終日 {expected_end} は未確定です（CSV内の日付: {returned_dates[-3:]}）"
                             )
                         rows = matching_rows
                     all_csv_rows.extend(rows)
