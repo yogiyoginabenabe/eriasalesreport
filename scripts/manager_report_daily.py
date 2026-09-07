@@ -119,12 +119,29 @@ def upsert_reports(client, incoming_rows: list[list[str]]) -> tuple[int, int]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--date", help="対象日 YYYYMMDD（省略時は日本時間の前日）")
+    parser.add_argument("--start-date", help="取得開始日 YYYYMMDD")
+    parser.add_argument("--end-date", help="取得終了日 YYYYMMDD")
     parser.add_argument("--debug-dir", default="debug")
     args = parser.parse_args()
-    target_date = args.date or (
-        datetime.now(ZoneInfo("Asia/Tokyo")).date() - timedelta(days=1)
-    ).strftime("%Y%m%d")
-    datetime.strptime(target_date, "%Y%m%d")
+    if bool(args.start_date) != bool(args.end_date):
+        parser.error("--start-dateと--end-dateは両方指定してください")
+    if args.date and args.start_date:
+        parser.error("--dateと期間指定は同時に使えません")
+    if args.start_date:
+        start = datetime.strptime(args.start_date, "%Y%m%d").date()
+        end = datetime.strptime(args.end_date, "%Y%m%d").date()
+        if start > end:
+            parser.error("開始日は終了日以前にしてください")
+        target_dates = []
+        cursor = start
+        while cursor <= end:
+            target_dates.append(cursor.strftime("%Y%m%d"))
+            cursor += timedelta(days=1)
+    else:
+        target_dates = [args.date or (
+            datetime.now(ZoneInfo("Asia/Tokyo")).date() - timedelta(days=1)
+        ).strftime("%Y%m%d")]
+        datetime.strptime(target_dates[0], "%Y%m%d")
 
     debug_dir = Path(args.debug_dir)
     debug_dir.mkdir(parents=True, exist_ok=True)
@@ -136,19 +153,26 @@ def main() -> None:
         page = context.new_page()
         try:
             report_api.login(page)
-            raw = fetch_csv(page, target_date, debug_dir)
+            rows = []
+            for target_date in target_dates:
+                raw = fetch_csv(page, target_date, debug_dir)
+                day_rows = decode_csv(raw)
+                rows.extend(day_rows)
+                log(f"日報CSV取得完了: {target_date} / {len(day_rows)}件")
         except Exception:
             page.screenshot(path=str(debug_dir / "manager-report-failure.png"), full_page=True)
             raise
         finally:
             browser.close()
 
-    rows = decode_csv(raw)
     if not rows:
-        log(f"日報CSVに保存可能な行がありません: {target_date}")
+        log(f"日報CSVに保存可能な行がありません: {target_dates[0]}〜{target_dates[-1]}")
         return
     inserted, updated = upsert_reports(google_client(), rows)
-    log(f"日報保存完了: {target_date} / {len(rows)}件 / 新規 {inserted}件 / 更新 {updated}件")
+    log(
+        f"日報保存完了: {target_dates[0]}〜{target_dates[-1]} / {len(rows)}件 / "
+        f"新規 {inserted}件 / 更新 {updated}件"
+    )
 
 
 if __name__ == "__main__":
