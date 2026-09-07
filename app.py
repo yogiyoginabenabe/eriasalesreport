@@ -1177,6 +1177,7 @@ def _trigger_sales_backfill(start_date, end_date, summary_period=None, daily_dat
     inputs = {
         "store_report_date": "", "backfill_start_month": "", "backfill_end_month": "",
         "summary_start": "", "summary_end": "", "summary_period": "",
+        "manager_report_start": "", "manager_report_end": "",
     }
     if daily_date:
         inputs["store_report_date"] = daily_date.strftime("%Y%m%d")
@@ -1211,6 +1212,40 @@ def _trigger_sales_backfill(start_date, end_date, summary_period=None, daily_dat
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"取得処理の開始に失敗しました（HTTP {exc.code}）：{detail}") from exc
+
+
+def _trigger_manager_report_fetch(start_date, end_date):
+    """画面から日報CSVだけを指定期間で再取得する。"""
+    import urllib.error
+    import urllib.request
+    token = str(st.secrets.get("GITHUB_ACTIONS_TOKEN", "")).strip()
+    if not token:
+        raise RuntimeError("Streamlit Secretsに GITHUB_ACTIONS_TOKEN が設定されていません")
+    url = "https://api.github.com/repos/yogiyoginabenabe/eriasalesreport/actions/workflows/sales_daily_import.yml/dispatches"
+    inputs = {
+        "store_report_date": "", "backfill_start_month": "", "backfill_end_month": "",
+        "summary_start": "", "summary_end": "", "summary_period": "",
+        "manager_report_start": start_date.strftime("%Y%m%d"),
+        "manager_report_end": end_date.strftime("%Y%m%d"),
+    }
+    payload = json.dumps({"ref": "main", "inputs": inputs}).encode("utf-8")
+    request = urllib.request.Request(
+        url, data=payload, method="POST",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "Content-Type": "application/json",
+            "User-Agent": "Yogibo-sales-dashboard",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            if response.status != 204:
+                raise RuntimeError(f"日報取得の開始に失敗しました（HTTP {response.status}）")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"日報取得の開始に失敗しました（HTTP {exc.code}）：{detail}") from exc
 
 
 # ══════════════════════════════════════════════
@@ -2899,6 +2934,28 @@ elif st.session_state.get('current_page', 'summary') == 'report':
     else:
         diary_start = report_date - pd.Timedelta(days=1)
         diary_end = diary_start
+
+    report_fetch_col, report_reload_col, report_note_col = st.columns([1.4, 1.3, 4])
+    with report_fetch_col:
+        if st.button("⬇️ 日報データ取得", type="primary", use_container_width=True, key="manager_report_fetch"):
+            with st.spinner("日報の取得処理を開始しています..."):
+                try:
+                    _trigger_manager_report_fetch(diary_start, diary_end)
+                    st.session_state["_manager_report_fetch_started"] = (
+                        f"{diary_start:%Y/%m/%d}〜{diary_end:%Y/%m/%d}の日報取得を開始しました。"
+                        "完了まで1〜2分ほど待ってから再読込してください。"
+                    )
+                except Exception as exc:
+                    st.error(str(exc))
+    with report_reload_col:
+        if st.button("🔄 取得結果を再読込", use_container_width=True, key="manager_report_reload"):
+            _load_manager_reports_from_db.clear()
+            st.session_state.pop("_manager_report_fetch_started", None)
+            st.rerun()
+    with report_note_col:
+        st.caption(f"取得対象：{diary_start:%Y/%m/%d}〜{diary_end:%Y/%m/%d}｜同じ日報は重複せず更新されます。")
+    if st.session_state.get("_manager_report_fetch_started"):
+        st.success(st.session_state["_manager_report_fetch_started"])
 
     agency_reports = pd.DataFrame()
     selected_reports = pd.DataFrame()
