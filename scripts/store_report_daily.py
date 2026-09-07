@@ -358,6 +358,7 @@ def main() -> None:
     debug_dir.mkdir(parents=True, exist_ok=True)
     all_csv_rows = []
 
+    current_mtd_summary = None
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         context = browser.new_context(locale="ja-JP", timezone_id="Asia/Tokyo")
@@ -403,6 +404,17 @@ def main() -> None:
                     log(f"CSV取得完了: {len(rows)}行")
                 except report_api.NoDataYetError as exc:
                     log(f"データなし（継続）: {exc}")
+
+            # TOPは同じ実行で取得した月初〜前日の単一集計を正本にする。
+            if not args.summary_start and (args.yesterday or args.recent_days):
+                mtd_start, mtd_end = periods[0][0], periods[-1][1]
+                log(f"TOP MTD取得中: {mtd_start}〜{mtd_end}（m）")
+                raw = report_api.fetch_report_csv(page, mtd_start, mtd_end, period="m")
+                (debug_dir / f"store-report-m-{mtd_start}-{mtd_end}.csv").write_bytes(raw)
+                current_mtd_summary = (
+                    mtd_start, mtd_end, report_api.parse_report_csv(raw)
+                )
+                log(f"TOP MTD取得完了: {len(current_mtd_summary[2])}行")
         except Exception:
             page.screenshot(path=str(debug_dir / "failure.png"), full_page=True)
             (debug_dir / "failure_url.txt").write_text(page.url, encoding="utf-8")
@@ -435,6 +447,19 @@ def main() -> None:
         inserted, updated = upsert_history(client, history_rows, keep_month=keep_month)
         store_days = len({(row[1], row[4]) for row in history_rows})
         log(f"保存完了: 店舗日数 {store_days} / 新規 {inserted}行 / 更新 {updated}行")
+        if current_mtd_summary:
+            mtd_start, mtd_end, mtd_rows = current_mtd_summary
+            summary_rows = to_summary_cache_rows(
+                mtd_rows, target_stores, "mtd", mtd_start, mtd_end
+            )
+            s_inserted, s_updated = upsert_summary_cache(client, summary_rows)
+            sales_total = sum(
+                float(row[-1]) for row in summary_rows if row[-2] == "受注金額(税抜)"
+            )
+            log(
+                f"TOP MTD保存完了: 受注合計 {sales_total:,.0f}円 / "
+                f"新規 {s_inserted}行 / 更新 {s_updated}行"
+            )
 
 
 if __name__ == "__main__":
