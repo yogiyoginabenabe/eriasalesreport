@@ -2827,9 +2827,13 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         agency = st.selectbox("代行会社", agencies, key="report_agency")
 
     if report_type.startswith("月曜"):
-        # 月曜は終了した前週（月〜日）を確定比較する。
+        # 月曜は終了した前週を確定比較する。ただしW1は月初から始め、
+        # 前月末（例: 9/7基準に対する8/31）の目標・実績を含めない。
         end_date = report_date - pd.Timedelta(days=1)
-        start_date = end_date - pd.Timedelta(days=6)
+        start_date = max(
+            end_date - pd.Timedelta(days=6),
+            report_date.replace(day=1),
+        )
         target_start_date, target_end_date = start_date, end_date
     elif report_type.startswith(("土曜", "日曜")):
         # 基準日が属する月内のW1・W2…を自動判定する。
