@@ -1394,7 +1394,9 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                     _delta_str = f'前年比MTD {_yoy:.1f}%'
                     _delta_color = 'normal' if _yoy >= 100 else ('off' if _yoy >= 90 else 'inverse')
             _kpi_cols[_ki].metric(f'{_icon} {_metric}', _label, delta=_delta_str, delta_color=_delta_color)
-        st.divider()
+        # TOPはエリア全体KPIのみ表示する。旧ランキングは利用しないため、
+        # ここでTOPページの描画を終了する。
+        st.stop()
 
         st.markdown('### 🏆 本日時点 ランキング（上位10店舗）')
         st.caption(f'📅 {_date_label} 時点のデータ')
