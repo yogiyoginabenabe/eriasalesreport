@@ -550,7 +550,7 @@ def _load_sales_history_from_db():
     """Google Sheets全件取得を短時間キャッシュし、TOPの最新性と速度を両立する。"""
     return _db_worksheet("sales_history").get_all_values()
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=30, show_spinner=False)
 def _load_summary_cache_from_db():
     """週別・月別の高速サマリーを5分キャッシュする。"""
     columns = ["集計単位", "開始日", "終了日", "店舗名", "店舗コード", "代行会社", "エリア", "指標", "値"]
@@ -1307,6 +1307,30 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                 f"最新実績は {_target_cutoff_date:%Y/%m/%d} までです。"
                 f"{_yesterday:%Y/%m/%d} 分はまだ実績DBへ反映されていません。"
             )
+
+        # TOPは日別履歴の足し上げではなく、同じ日次バッチが保存した
+        # 月初〜最新日の単一集計を使用し、累計スナップショットの二重加算を防ぐ。
+        try:
+            _top_summary_all = _load_summary_cache_from_db()
+            _mtd_start_iso = _target_cutoff_date.replace(day=1).isoformat()
+            _mtd_end_iso = _target_cutoff_date.isoformat()
+            _top_mtd_cache = _top_summary_all[
+                (_top_summary_all["集計単位"] == "mtd") &
+                (_top_summary_all["開始日"] == _mtd_start_iso) &
+                (_top_summary_all["終了日"] == _mtd_end_iso) &
+                (_top_summary_all["店舗名"].isin(selected_stores))
+            ].copy()
+            if not _top_mtd_cache.empty:
+                _top_long_now = _top_mtd_cache.rename(columns={"終了日": "日付_原本"})
+                _top_long_now["日付_原本"] = pd.to_datetime(
+                    _top_long_now["日付_原本"], errors="coerce"
+                ).dt.strftime("%Y/%m/%d")
+                _top_long_now["月日"] = pd.to_datetime(
+                    _top_mtd_cache["終了日"], errors="coerce"
+                ).dt.strftime("%m/%d")
+                _top_long_now["年度"] = "実績"
+        except Exception:
+            pass
 
         _filtered_targets = {}
         for _fk, _fv in st.session_state.targets.items():
