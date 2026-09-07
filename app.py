@@ -2810,7 +2810,28 @@ elif st.session_state.get('current_page', 'summary') == 'report':
                 return pd.DataFrame(), str(exc)
         return pd.DataFrame(), "CSVの文字コードを判定できませんでした。"
 
-    manager_reports = pd.DataFrame()
+    @st.cache_data(ttl=300, show_spinner=False)
+    def _load_manager_reports_from_db():
+        try:
+            values = _db_worksheet("manager_reports", rows=1000, cols=7).get_all_values()
+            if not values or len(values) < 2:
+                return pd.DataFrame()
+            df = pd.DataFrame(values[1:], columns=values[0])
+            required = {"日付", "店舗名", "マネージャー名", "グッド！", "オポチュニティ↑"}
+            if not required.issubset(df.columns):
+                return pd.DataFrame()
+            df["日付"] = pd.to_datetime(df["日付"], errors="coerce")
+            for col in ["店舗名", "マネージャー名", "グッド！", "オポチュニティ↑", "個人的なこと", "改善要望"]:
+                if col not in df.columns:
+                    df[col] = ""
+                df[col] = df[col].fillna("").astype(str).str.strip()
+            return df.dropna(subset=["日付", "店舗名", "マネージャー名"])
+        except Exception:
+            return pd.DataFrame()
+
+    manager_reports = _load_manager_reports_from_db()
+    if not manager_reports.empty:
+        st.caption(f"✅ 保存済みの日報を自動読込中（{manager_reports['日付'].max():%Y/%m/%d}まで）")
     if daily_report_file is not None:
         manager_reports, manager_report_error = _load_manager_reports(daily_report_file.getvalue())
         if manager_report_error:
