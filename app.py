@@ -580,7 +580,12 @@ def load_history(path):
                 df = pd.DataFrame(values[1:], columns=values[0])
                 df["日付"] = pd.to_datetime(df["日付"], errors="coerce")
                 df["値"] = pd.to_numeric(df["値"], errors="coerce")
-                return df.dropna(subset=["日付", "指標", "値"])
+                df = df.dropna(subset=["日付", "指標", "値"])
+                if {"店舗コード", "日付", "指標"}.issubset(df.columns):
+                    df = df.drop_duplicates(
+                        subset=["店舗コード", "日付", "指標"], keep="last"
+                    )
+                return df
         except Exception as exc:
             st.session_state["_sales_db_error"] = str(exc)
     if not os.path.exists(path):
@@ -1265,15 +1270,6 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                 (_top_long_now['月日'].str.split('/').str[0] == _cutoff_month_str) &
                 (_top_long_now['月日'] <= _top_cutoff)
             ]
-            # sales_historyの日別値は「単日実績」ではなく、その日時点の月間累計。
-            # 複数日を合計せず、店舗・指標ごとの最新スナップショットだけを使う。
-            if '日付' in _top_long_now.columns and not _top_long_now.empty:
-                _top_long_now = (
-                    _top_long_now.sort_values('日付')
-                    .groupby(['店舗コード', '店舗名', '指標'], as_index=False, dropna=False)
-                    .tail(1)
-                    .copy()
-                )
         # 前年：前年CSVの月日から今年対応日を逆引き → 今年MTD範囲に絞る
         if not _top_long_prev.empty:
             _prev_all_days = list(_top_long_prev['月日'].unique())
@@ -1800,15 +1796,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
         _is_live_month = (
             sel_year == _jst_today().year and sel_month_num == _jst_today().month
         )
-        if _is_live_month and _summary_period_code == "m" and '日付' in ov_long_now.columns and not ov_long_now.empty:
-            # 当月の日別DBは月間累計スナップショットなので、最新日だけを採用する。
-            ov_long_now = (
-                ov_long_now.sort_values('日付')
-                .groupby(['店舗コード', '店舗名', '指標'], as_index=False, dropna=False)
-                .tail(1)
-                .copy()
-            )
-        elif not _summary_cache_now.empty:
+        if not (_is_live_month and _summary_period_code == "m") and not _summary_cache_now.empty:
             # 過去月と週選択は、店舗分析から取得した月別・週別集計を使う。
             ov_long_now = _summary_cache_to_long(_summary_cache_now)
         if not _summary_cache_prev.empty:
