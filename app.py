@@ -3146,14 +3146,20 @@ elif st.session_state.get('current_page', 'summary') == 'report':
 
     st.markdown("### 💬 日報レスポンス候補")
     st.caption(f"対象日報：{diary_start:%Y/%m/%d}〜{diary_end:%Y/%m/%d}（新しさ→具体的行動→承認しやすさ→売上との関連性で選定）")
-    if daily_report_file is None:
-        st.info("ストアマネージャー日報まとめCSVをアップロードすると、レスポンス候補を選定できます。")
+    if manager_reports.empty:
+        st.info("日報データを取得するか、ストアマネージャー日報まとめCSVをアップロードすると、レスポンス候補を選定できます。")
     elif selected_reports.empty:
         st.warning("選択した会社・対象期間に該当する日報がありません。")
     else:
-        source_view = selected_reports[["日付", "店舗名", "マネージャー名", "グッド！", "オポチュニティ↑"]].copy()
-        source_view["日付"] = source_view["日付"].dt.strftime("%Y/%m/%d")
-        st.dataframe(source_view, use_container_width=True, hide_index=True)
+        st.caption(f"AI生成に使用する日報候補：{len(selected_reports)}件（クリックすると原文を確認できます）")
+        for _, source_row in selected_reports.iterrows():
+            source_date = source_row["日付"].strftime("%Y/%m/%d")
+            source_title = f"{source_date}｜{source_row['店舗名']}｜{source_row['マネージャー名']}さん"
+            with st.expander(source_title, expanded=False):
+                for source_col in ["グッド！", "オポチュニティ↑", "個人的なこと", "改善要望"]:
+                    source_text = str(source_row.get(source_col, "") or "").strip()
+                    st.markdown(f"**{source_col}**")
+                    st.write(source_text if source_text else "—")
 
     st.markdown("### 🧭 レポートの背景・重点施策")
     report_context = st.text_area(
