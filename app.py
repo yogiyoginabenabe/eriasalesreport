@@ -2989,8 +2989,11 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         )
 
     cur = hist[(hist["代行会社"] == agency) & (hist["日付"].dt.date >= start_date) & (hist["日付"].dt.date <= end_date)].copy()
-    prev_start = start_date - pd.Timedelta(weeks=52)
-    prev_end = end_date - pd.Timedelta(weeks=52)
+    # 前年は「今年の実績取得済み期間」ではなく、対象週全体を同曜日で比較する。
+    # 例：2026/09/21(月)〜09/27(日) → 2025/09/22(月)〜09/28(日)
+    # 土曜・日曜レポートでは今年実績が前日まででも、前年は週末まで7日間集計する。
+    prev_start = target_start_date - pd.Timedelta(weeks=52)
+    prev_end = target_end_date - pd.Timedelta(weeks=52)
     prev = hist[(hist["代行会社"] == agency) & (hist["日付"].dt.date >= prev_start) & (hist["日付"].dt.date <= prev_end)].copy()
     tgt = tgt_hist[(tgt_hist["店舗名"].isin(agency_stores)) &
                    (pd.to_datetime(tgt_hist["日付"]).dt.date >= target_start_date) &
