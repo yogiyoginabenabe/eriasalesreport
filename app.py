@@ -3064,7 +3064,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
     m1.metric(
         "💴 受注実績",
         f"{total['受注_実績']:,.0f}円" if pd.notna(total["受注_実績"]) else "—",
-        f"前年比 {total['受注_前年比']:.1f}%" if pd.notna(total["受注_前年比"]) else None,
+        f"前年比 {total['受注_前年比']:.0f}%" if pd.notna(total["受注_前年比"]) else None,
     )
     _target_gap_card(
         m2, "🎯 受注目標差",
@@ -3073,7 +3073,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
     m3.metric(
         "🪑 座数",
         f"{total['座数_実績']:,.0f}" if pd.notna(total["座数_実績"]) else "—",
-        f"前年比 {total['座数_前年比']:.1f}%" if pd.notna(total["座数_前年比"]) else None,
+        f"前年比 {total['座数_前年比']:.0f}%" if pd.notna(total["座数_前年比"]) else None,
     )
     _target_gap_card(
         m4, "🎯 座数目標差",
@@ -3094,7 +3094,8 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         if value is None or pd.isna(value):
             return "—"
         color = "#43aeca" if value >= 100 else "#e52b12"
-        return f'<span style="color:{color};font-weight:800">{value:.1f}%</span>'
+        # 前年比・目標比は小数点以下を四捨五入して整数表示
+        return f'<span style="color:{color};font-weight:800">{value:.0f}%</span>'
 
     report_css = """
     <style>
@@ -3268,6 +3269,10 @@ elif st.session_state.get('current_page', 'summary') == 'report':
 - タイトルには会社名・法人名を入れない。スマートフォンで読みやすい短さを優先する。
 - 土日の共有場面を「ミーティング」と書かず「朝礼」とする。
 - 「複数点販売」という表現は使わず、「セット販売」とする。
+- 「現場」という言葉は使わない。必ず「店舗」に置き換える（例：「現場課題」→「店舗課題」、「現場で」→「店舗で」）。
+- 数値表記は、前年比の％は小数点以下を四捨五入して整数で表示する（例：121.09％→121％、155.69％→156％）。
+- CVRの実績値は小数点以下第1位まで表示し、第2位以下を四捨五入する（例：26.04％→26.0％、50.10％→50.1％）。
+- 目標比の％も読みやすさを優先し、小数点以下第1位までとする。
 
 【今回の構成】
 {structure_instruction}
