@@ -661,6 +661,120 @@ def target_bytes_to_history(file_bytes, metric_name, master_df):
     except Exception:
         return _empty_history()
 
+# ─────────────────────────────────────────────
+# 会社別AIレポート・ナレッジ
+# 生成した本文をGoogle Sheetsへ会社別・対象週別に蓄積し、
+# 次回生成時（特に月曜週次）に同じ会社の過去レポートを文脈として渡す。
+# ─────────────────────────────────────────────
+REPORT_KNOWLEDGE_COLUMNS = [
+    "会社名", "生成日", "対象週開始", "対象週終了", "レポート種別",
+    "実績開始", "実績終了", "本文", "更新日時",
+]
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _load_agency_report_knowledge_from_db():
+    try:
+        values = _db_worksheet("agency_report_knowledge").get_all_values()
+    except Exception:
+        return pd.DataFrame(columns=REPORT_KNOWLEDGE_COLUMNS)
+    if not values or len(values) < 2:
+        return pd.DataFrame(columns=REPORT_KNOWLEDGE_COLUMNS)
+    df = pd.DataFrame(values[1:], columns=values[0])
+    for col in REPORT_KNOWLEDGE_COLUMNS:
+        if col not in df.columns:
+            df[col] = ""
+    return df[REPORT_KNOWLEDGE_COLUMNS].copy()
+
+def _save_agency_report_knowledge(agency, report_date, week_start, week_end,
+                                  report_type, actual_start, actual_end, body):
+    """同一会社・生成日・レポート種別は最新版で更新し、会社別ナレッジとして永続保存。"""
+    try:
+        ws = _db_worksheet(
+            "agency_report_knowledge",
+            rows=2000,
+            cols=len(REPORT_KNOWLEDGE_COLUMNS),
+        )
+        values = ws.get_all_values()
+        if values and len(values) > 1:
+            df = pd.DataFrame(values[1:], columns=values[0])
+            for col in REPORT_KNOWLEDGE_COLUMNS:
+                if col not in df.columns:
+                    df[col] = ""
+            df = df[REPORT_KNOWLEDGE_COLUMNS]
+        else:
+            df = pd.DataFrame(columns=REPORT_KNOWLEDGE_COLUMNS)
+
+        key_mask = (
+            (df["会社名"].astype(str) == str(agency)) &
+            (df["生成日"].astype(str) == report_date.strftime("%Y-%m-%d")) &
+            (df["レポート種別"].astype(str) == str(report_type))
+        ) if not df.empty else pd.Series(dtype=bool)
+        if not df.empty:
+            df = df.loc[~key_mask].copy()
+
+        new_row = pd.DataFrame([{
+            "会社名": agency,
+            "生成日": report_date.strftime("%Y-%m-%d"),
+            "対象週開始": week_start.strftime("%Y-%m-%d"),
+            "対象週終了": week_end.strftime("%Y-%m-%d"),
+            "レポート種別": report_type,
+            "実績開始": actual_start.strftime("%Y-%m-%d"),
+            "実績終了": actual_end.strftime("%Y-%m-%d"),
+            "本文": body,
+            "更新日時": _datetime_global.datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m-%d %H:%M:%S"),
+        }])
+        df = pd.concat([df, new_row], ignore_index=True)
+        df = df.sort_values(["会社名", "生成日", "更新日時"])
+        out = [REPORT_KNOWLEDGE_COLUMNS] + df[REPORT_KNOWLEDGE_COLUMNS].fillna("").astype(str).values.tolist()
+        ws.clear()
+        ws.update(range_name="A1", values=out)
+        _load_agency_report_knowledge_from_db.clear()
+        return True
+    except Exception as exc:
+        st.session_state["_agency_knowledge_error"] = str(exc)
+        return False
+
+def _agency_report_context(agency, week_start, week_end, report_date, report_type):
+    """同一会社の当週レポートを最優先し、直近レポートも少量だけ補助文脈として返す。"""
+    df = _load_agency_report_knowledge_from_db()
+    if df.empty:
+        return "保存済みレポートなし"
+    df = df[df["会社名"].astype(str) == str(agency)].copy()
+    if df.empty:
+        return "保存済みレポートなし"
+
+    df["_生成日"] = pd.to_datetime(df["生成日"], errors="coerce")
+    df = df[df["_生成日"].dt.date < report_date].copy()
+    if df.empty:
+        return "保存済みレポートなし"
+
+    ws = week_start.strftime("%Y-%m-%d")
+    we = week_end.strftime("%Y-%m-%d")
+    same_week = df[
+        (df["対象週開始"].astype(str) == ws) &
+        (df["対象週終了"].astype(str) == we)
+    ].sort_values("_生成日")
+
+    # 月曜週次は同一対象週の土日レポートを核にする。
+    # それ以外は同一週の直近レポートを継承する。
+    selected = same_week.tail(4 if str(report_type).startswith("月曜") else 2)
+    # 同一週がまだ無い場合だけ、同社の直近2件を会社固有の文体・継続課題の参考にする。
+    if selected.empty:
+        selected = df.sort_values("_生成日").tail(2)
+
+    chunks = []
+    for _, r in selected.iterrows():
+        body = str(r.get("本文", "") or "").strip()
+        if not body:
+            continue
+        # プロンプト肥大化を防ぎつつ、Good/Opportunity/アクションまで十分残す。
+        chunks.append(
+            f"--- {r.get('生成日','')}｜{r.get('レポート種別','')} ---\n"
+            f"{body[:6000]}"
+        )
+    return "\n\n".join(chunks) if chunks else "保存済みレポートなし"
+
+
 def fiscal_period_range(fiscal_year, period_kind, period_value=None):
     """3月期首。fiscal_yearは期首年（例: 2026年度=2026/03〜2027/02）。"""
     import datetime
@@ -2930,9 +3044,12 @@ elif st.session_state.get('current_page', 'summary') == 'report':
             report_date.replace(day=1),
         )
         diary_end = report_date - pd.Timedelta(days=1)
-    elif report_date.weekday() in (6, 0):  # 日曜・月曜：前日のみ
+    elif report_date.weekday() == 6:  # 日曜：前日のみ
         diary_start = report_date - pd.Timedelta(days=1)
         diary_end = diary_start
+    elif report_date.weekday() == 0:  # 月曜：総括対象の前週（月〜日）をすべて参照
+        diary_start = report_date - pd.Timedelta(days=7)
+        diary_end = report_date - pd.Timedelta(days=1)
     else:
         diary_start = report_date - pd.Timedelta(days=1)
         diary_end = diary_start
@@ -3202,15 +3319,21 @@ elif st.session_state.get('current_page', 'summary') == 'report':
                 ].copy()
                 report_sources["日付"] = report_sources["日付"].dt.strftime("%Y/%m/%d")
 
+                saved_report_context = _agency_report_context(
+                    agency, target_start_date, target_end_date, report_date, report_type
+                )
+
                 if report_type.startswith("月曜"):
                     structure_instruction = """
 【月曜・週次レポート型】
 1. 【週次｜レポート】
-2. 「おはようございます！」から始め、前週への労い→数値で確認できる全体像→現場課題の順に3〜5段落で展開。
-3. データがある場合のみ、受注・座数の目標達成店舗を祝う。ない指標や店舗は書かない。
-4. 【週間実績】として会社全体の受注金額・座数・客数・CVR・客単価・品数を、存在する目標比／前年比とともに整理。
-5. 【Good / Opportunity】
-   Goodは数字または日報の具体的な強み、Opportunityは改善余地と現場での打ち手を記載。
+2. 月曜は1週間の「総括」であり、土日レポートより内容を薄くしない。【同一会社の保存済みレポート】がある場合は必ず読み、週の途中で何を課題として伝えたか→店舗がどう動いたか→最終着地がどうなったか、という時間軸で3〜5段落にまとめる。
+3. 「おはようございます！」から始め、前週への労い→週間数値の全体像→週中・週末に確認した具体的なGood→改善を求めてきたKPIの最終着地→今週へ継続する課題、の順に展開する。
+4. データがある場合のみ、受注・座数の目標達成店舗を祝う。ない指標や店舗は書かない。
+5. 【週間実績】として対象会社全店舗の受注金額・座数・客数・CVR・客単価・品数を、存在する目標比／前年比とともに整理。
+6. 【Good / Opportunity】
+   Goodは週間数値、日報、保存済みレポートに残る具体的な成功行動を店舗名とともに複数拾う。Opportunityは目標未達KPIについて、週中に求めた改善行動と最終結果を照合し、翌週に何を変えるかまで明確に書く。
+   保存済みレポートに「座数不足」「アプローチ」「ツカミ」「8ステップ」等の継続課題があり、週間結果でも未達なら、その経緯を必ずつなげて改善要求を弱めない。
 6. 【SM日報レスポンス】
    選定済み全員に対し「●氏名さん（店舗名）：」で返信。
    必ず「日報の具体的事実→その行動の価値→次週の一手」の3点を、1人2文・100〜160字程度で簡潔につなぐ。
@@ -3218,7 +3341,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
 7. 🌸エリアフォーカス🌸
    根拠から導ける重点行動を2〜3項目。「行動名→店頭での具体動作・声掛け・確認方法」の内容は維持する。
    各項目は「・具体動作」「・声掛け」「・確認方法」の3行とし、各行は一文・全角45文字程度以内に圧縮する。
-   背景説明や同じ目的の繰り返しは省き、現場がそのまま実行できる要点だけを書く。
+   背景説明や同じ目的の繰り返しは省き、店舗がそのまま実行できる要点だけを書く。
 8. 次週を前向きに迎えられる、短く力強い締め。
 """
                 else:
@@ -3248,10 +3371,12 @@ elif st.session_state.get('current_page', 'summary') == 'report':
 
                 prompt = f"""
 あなたはYogiboのエリアマネージャー向け社内投稿を作成します。
-以下の【売上サマリー】【選定済み日報】【渡邊AMからの追加情報】だけを根拠に、日本語のTUNAG投稿文を作成してください。
+以下の【売上サマリー】【選定済み日報】【同一会社の保存済みレポート】【渡邊AMからの追加情報】を根拠に、日本語のTUNAG投稿文を作成してください。
 
 絶対条件：
-- 根拠として使えるのは【売上サマリー】【選定済み日報】【渡邊AMからの追加情報】だけ。
+- 根拠として使えるのは【売上サマリー】【選定済み日報】【同一会社の保存済みレポート】【渡邊AMからの追加情報】だけ。
+- 【同一会社の保存済みレポート】は過去にこのシステム自身が生成した文章であり、同じ会社の継続課題・成功事例・指導内容をつなぐためのナレッジとして使う。ただし、過去レポート内の数値を今回の最新実績として扱わず、最新数値は必ず【売上サマリー】を優先する。
+- 保存済みレポートをそのままコピーせず、今回の最新実績・日報と照合して「前回までの課題→今回の結果→次の行動」へ更新する。
 - ソースにない事実、人物、行動、数値、期限、キャンペーン、商品施策を追加しない。不明なことは推測しない。
 - 商品名・施策名・成果名・現場用語は、ソースに記載された語句をそのまま使う。似た業務用語への言い換え、語句の結合、接頭語・接尾語の補完は禁止。例えばソースが「ケア」の場合、「リペアケア」など別の名称に変えない。
 - 全国平均など、入力にない比較値は書かない。
@@ -3295,6 +3420,8 @@ elif st.session_state.get('current_page', 'summary') == 'report':
 {report_df.to_csv(index=False)}
 【選定済み日報】
 {report_sources.to_csv(index=False)}
+【同一会社の保存済みレポート】
+{saved_report_context}
 【渡邊AMからの追加情報】
 {report_context.strip() if report_context.strip() else "追加情報なし"}
 """
@@ -3324,7 +3451,21 @@ elif st.session_state.get('current_page', 'summary') == 'report':
                     if not generated_text:
                         raise last_error or ValueError("AIから文章が返されませんでした。")
                     st.session_state["_generated_tunag"] = {"key": generation_key, "text": generated_text}
-                    st.success(f"日報と売上サマリーに基づいてレポートを生成しました（{used_model}）。")
+                    knowledge_saved = _save_agency_report_knowledge(
+                        agency=agency,
+                        report_date=report_date,
+                        week_start=target_start_date,
+                        week_end=target_end_date,
+                        report_type=report_type,
+                        actual_start=start_date,
+                        actual_end=end_date,
+                        body=generated_text,
+                    )
+                    if knowledge_saved:
+                        st.success(f"レポートを生成し、{agency}のAIナレッジへ保存しました（{used_model}）。")
+                    else:
+                        st.success(f"レポートを生成しました（{used_model}）。")
+                        st.warning("レポート本文のナレッジ保存だけ失敗しました。生成本文はそのまま利用できます。")
                 except Exception as exc:
                     st.error(f"AIレポートを生成できませんでした：{exc}")
         else:
