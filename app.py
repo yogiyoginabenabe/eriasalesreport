@@ -1865,8 +1865,8 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
             ov_has_prev = True
         elif _summary_using_db:
             st.warning(
-                f"比較用データ（{_prev_req_start:%Y/%m/%d}〜{_prev_req_end:%Y/%m/%d}）が未取得です。"
-                f"「{_summary_period_label}データを取得」を押し、完了後に再読込してください。"
+                f"前年列を表示していますが、比較用データ（{_prev_req_start:%Y/%m/%d}〜{_prev_req_end:%Y/%m/%d}）は未取得です。"
+                f"数値を表示するには「{_summary_period_label}データを取得」を押し、完了後に再読込してください。"
             )
 
         st.caption(
@@ -2036,7 +2036,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                     parts.append(f'<td class="ov-td">{ach_span(ach)}</td>')
                 else:
                     parts.append(f'<td class="ov-td{sep_d}">{fmt_v(vn, unit)}</td>')
-                if ov_has_prev and not ov_long_prev.empty:
+                if show_yoy_columns:
                     parts.append(f'<td class="ov-td">{fmt_v(vp, unit)}</td>')
                     yoy = (vn/abs(vp)*100) if vp and not pd.isna(vp) and vp!=0 and not pd.isna(vn) else None
                     parts.append(f'<td class="ov-td">{yoy_span(yoy)}</td>')
@@ -2045,17 +2045,19 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
     
         # ── ヘッダー ──
         has_target = uploaded_target_sales or uploaded_target_zasu
+        # 前年データが未取得でも列は消さず、取得後に同じ位置へ値を表示する。
+        show_yoy_columns = True
         html_parts = ['<table class="ov-table"><thead><tr><th class="ov-th" rowspan="2" style="min-width:110px">店舗名</th>']
         for mig, (metric, label, unit, _) in enumerate(OVERVIEW_METRICS):
             is_tm = metric in ["受注金額(税抜)","座数"] and has_target
-            has_yoy = ov_has_prev and not ov_long_prev.empty
+            has_yoy = show_yoy_columns
             span = (4 if is_tm else 1) + (2 if has_yoy else 0)
             sep_g = ' ov-th-group-sep' if mig > 0 else ''
             html_parts.append(f'<th class="ov-th-group{sep_g}" colspan="{span}">{label}</th>')
         html_parts.append('</tr><tr>')
         for mi2, (metric, label, unit, _) in enumerate(OVERVIEW_METRICS):
             is_tm = metric in ["受注金額(税抜)","座数"] and has_target
-            has_yoy = ov_has_prev and not ov_long_prev.empty
+            has_yoy = show_yoy_columns
             sep_h = ' ov-th-sep' if mi2 > 0 else ''
             if is_tm:
                 html_parts.append(f'<th class="ov-th{sep_h}">目標</th><th class="ov-th">実績</th><th class="ov-th">差額</th><th class="ov-th">目標比</th>')
@@ -2101,7 +2103,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
         _hdr2 = ['']
         for metric, label, unit, _ in OVERVIEW_METRICS:
             is_tm = metric in ['受注金額(税抜)', '座数'] and has_target
-            has_yoy = ov_has_prev and not ov_long_prev.empty
+            has_yoy = show_yoy_columns
             if is_tm:
                 _hdr1 += [label, '', '', '']
                 _hdr2 += ['目標', '実績', '差額', '目標比(%)']
@@ -2119,7 +2121,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
             row = [store_label]
             for metric, label, unit, _ in OVERVIEW_METRICS:
                 is_tm = metric in ['受注金額(税抜)', '座数'] and has_target
-                has_yoy = ov_has_prev and not ov_long_prev.empty
+                has_yoy = show_yoy_columns
                 sub_now  = ov_long_now[ov_long_now['指標']==metric]
                 sub_prev = ov_long_prev[ov_long_prev['指標']==metric] if (ov_has_prev and not ov_long_prev.empty) else pd.DataFrame()
                 sub_now  = sub_now[sub_now['店舗名'].isin(store_list)]
