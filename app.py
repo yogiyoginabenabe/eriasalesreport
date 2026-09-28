@@ -2992,7 +2992,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
     with rc1:
         report_date = st.date_input("レポート基準日", value=max_hist_date + pd.Timedelta(days=1), key="report_date")
     weekday_default = {5: "土曜：週末ブースト", 6: "日曜：週残取り切り", 0: "月曜：前週振り返り"}.get(report_date.weekday(), "月曜：前週振り返り")
-    report_types = ["土曜：週末ブースト", "日曜：週残取り切り", "月曜：前週振り返り", "期間を指定"]
+    report_types = ["土曜：週末ブースト", "日曜：週残取り切り", "月曜：前週振り返り", "月次：月間振り返り", "期間を指定"]
     with rc2:
         report_type = st.selectbox("レポート種別", report_types, index=report_types.index(weekday_default), key="report_type")
     with rc3:
@@ -3006,6 +3006,12 @@ elif st.session_state.get('current_page', 'summary') == 'report':
             end_date - pd.Timedelta(days=6),
             report_date.replace(day=1),
         )
+        target_start_date, target_end_date = start_date, end_date
+    elif report_type.startswith("月次"):
+        # 月次は基準日の前月1日〜末日を確定値として振り返る。
+        month_anchor = report_date.replace(day=1) - pd.Timedelta(days=1)
+        start_date = month_anchor.replace(day=1)
+        end_date = month_anchor
         target_start_date, target_end_date = start_date, end_date
     elif report_type.startswith(("土曜", "日曜")):
         # 基準日が属する月内のW1・W2…を自動判定する。
@@ -3037,8 +3043,11 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         active_master.loc[active_master["代行会社"] == agency, "店舗名"].unique()
     )
 
-    # 日報の対象期間：直近の内容に反応するため曜日ごとに固定
-    if report_date.weekday() == 5:  # 土曜：直前の月〜金（ただし月初より前は含めない）
+    # 日報の対象期間：レポート種別に応じた振り返り範囲を使う
+    if report_type.startswith("月次"):
+        diary_start = start_date
+        diary_end = end_date
+    elif report_date.weekday() == 5:  # 土曜：直前の月〜金（ただし月初より前は含めない）
         diary_start = max(
             report_date - pd.Timedelta(days=5),
             report_date.replace(day=1),
@@ -3100,10 +3109,11 @@ elif st.session_state.get('current_page', 'summary') == 'report':
             return recency + action + effort + sales + detail
 
         agency_reports["_優先スコア"] = agency_reports.apply(_report_score, axis=1)
+        report_source_limit = 12 if report_type.startswith("月次") else 5
         selected_reports = (
             agency_reports.sort_values(["_優先スコア", "日付"], ascending=[False, False])
             .drop_duplicates(subset=["店舗名"], keep="first")
-            .head(5)
+            .head(report_source_limit)
             .copy()
         )
 
@@ -3286,9 +3296,9 @@ elif st.session_state.get('current_page', 'summary') == 'report':
 
     st.markdown("### 🧭 レポートの背景・重点施策")
     report_context = st.text_area(
-        "今週のテーマ・キャンペーン・必ず伝えたいこと（任意）",
+        "テーマ・キャンペーン・必ず伝えたいこと（任意）",
         placeholder="例：通常期に入り、名刺配布とFriend登録を徹底したい。今週はカバー同時購入を重点施策にする。",
-        help="ここに入力した内容もレポートの根拠として使います。未入力でも生成できますが、施策背景を入れると文章の厚みが増します。",
+        help="ここに入力した内容もレポートの根拠として使います。文字数制限はありません。未入力でも生成できますが、施策背景を入れると文章の厚みが増します。",
         key=f"report_context_{agency}_{report_type}",
         height=110,
     )
@@ -3323,7 +3333,23 @@ elif st.session_state.get('current_page', 'summary') == 'report':
                     agency, target_start_date, target_end_date, report_date, report_type
                 )
 
-                if report_type.startswith("月曜"):
+                if report_type.startswith("月次"):
+                    structure_instruction = """
+【月次・月間振り返り型】
+1. 【月次｜レポート】
+2. 1か月の総括として、対象会社の月間実績・目標・前年を軸に、月内に蓄積された同一会社のレポートと日報をつなげる。
+3. 「おはようございます！」から始め、1か月への労い→月間数値の全体像→月内の具体的Good→継続して見えた課題→翌月の重点行動、の順に4〜6段落で展開する。
+4. 【月間実績】として受注金額・座数・客数・CVR・客単価・品数を、存在する目標比／前年比とともに整理する。
+5. 【Good / Opportunity】
+   Goodは目標達成店舗・強いKPI・日報や保存済みレポートで繰り返し確認できた成功行動を具体的にまとめる。
+   Opportunityは月間で未達だったKPIと、月内レポートで継続して求めてきた改善行動を照合し、翌月に何を変えるかまで明確にする。
+6. 【SM日報レスポンス】
+   選定済み日報の中から、月を象徴する具体的な成功・改善行動へ簡潔に返信する。氏名・店舗名・事実を正確に使う。
+7. 🌸翌月フォーカス🌸
+   月間数値と蓄積ナレッジから、翌月に全店舗で徹底する重点行動を3項目程度に絞り、店頭で実行できる動作まで具体化する。
+8. 月間の努力を認めつつ、翌月の行動につながる短く力強い締めにする。
+"""
+                elif report_type.startswith("月曜"):
                     structure_instruction = """
 【月曜・週次レポート型】
 1. 【週次｜レポート】
@@ -3390,7 +3416,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
 - 一人称複数の「私たち」「我々」は使わない。主語が必要な場合は「エリア全体」「各店」「全員」「チーム」など文脈に合う表現を使い、不要なら主語を省く。
 - 「取り切る」「種まき」「回収」「一客への情熱」「フルスロットル」等は文脈に合う場合だけ自然に使い、過去文をそのままコピーしない。
 - 感嘆符や🔥は要所に使うが、全行を煽り文句にはしない。
-- 月曜の週次レポートは900〜1,300字、土曜・日曜は1,000〜1,600字を目安にする。根拠が少ない場合は水増しせず短くする。
+- 月次レポートは1,200〜1,800字、月曜の週次レポートは900〜1,300字、土曜・日曜は1,000〜1,600字を目安にする。根拠が少ない場合は水増しせず短くする。
 - TUNAGへ貼って崩れないテキスト形式にし、Markdownの表は使わない。
 - [User Query]、出典番号、AI注釈、分析過程は出力しない。
 - 構成項目に必要な根拠がなければ、捏造せずその項目を省略する。
