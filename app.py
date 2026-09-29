@@ -1544,7 +1544,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                     _delta_color = 'normal' if _yoy >= 100 else ('off' if _yoy >= 90 else 'inverse')
             _kpi_cols[_ki].metric(f'{_icon} {_metric}', _label, delta=_delta_str, delta_color=_delta_color)
         # マスタ編集の所属区分をそのまま使い、A/Bを同じ締め日と判定基準で比較する。
-        from top_insights import build_area_insights
+        from top_insights import build_area_insights, classify
 
         _area_data = build_area_insights(
             master_df, _top_long_now, _top_prev,
@@ -1570,17 +1570,26 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
         _diaries = _top_manager_reports()
 
         def _pct(value):
-            return f"{value:.1f}%" if value is not None else "比較不可"
+            return f"{value:.0f}%" if value is not None else "比較不可"
 
         for _col, _area in zip(st.columns(2), ("渡邊_A", "渡邊_B")):
             with _col:
                 _info = _area_data[_area]
                 with st.container(border=True):
                     st.subheader(f"{_area}　｜　{len(_info['stores'])}店舗")
+                    _status = classify(_info["sales_pct"], _info["visitor_pct"])
+                    if _status == "好調":
+                        st.success("好調｜受注・購入客数ともに基準達成")
+                    elif _status == "要確認":
+                        st.error("要確認｜受注・購入客数ともに基準未達")
+                    elif _status == "比較データ不足":
+                        st.info("比較データ不足｜目標・前年・当年実績の揃わない店舗があります")
+                    else:
+                        st.warning(_status)
                     _sales_col, _visitor_col = st.columns(2)
                     _sales_col.metric("受注金額（税抜）", f"{_info['sales']:,.0f}円",
                                       f"目標比 {_pct(_info['sales_pct'])}", delta_color="off")
-                    _visitor_col.metric("客数", f"{_info['visitors']:,.0f}人",
+                    _visitor_col.metric("客数（購入者数）", f"{_info['visitors']:,.0f}人",
                                         f"前年比 {_pct(_info['visitor_pct'])}", delta_color="off")
                     _rows = _info["stores"]
                     _good = sorted((r for r in _rows if r["status"] == "好調"),
@@ -1591,7 +1600,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                     def _store_line(row):
                         return (f"**{row['name']}**　受注 {_pct(row['sales_pct'])} ／ "
                                 f"客数 {_pct(row['visitor_pct'])}  \n"
-                                f"補助指標：{row['signals']}")
+                                f"補助指標：{row['signals']}  \n{row['reason']}")
 
                     st.markdown("**🟢 好調店舗**")
                     if _good:
@@ -1618,14 +1627,16 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                         )
                         if _watch:
                             _lead = _watch[0]
-                            st.write(f"まず{_lead['name']}を確認してください。数値上の補助指標は{_lead['signals']}です。")
+                            st.write(f"まず{_lead['name']}を確認してください。{_lead['reason']}")
+                        if _good:
+                            st.write(f"好調例は{_good[0]['name']}です。{_good[0]['reason']}")
                     else:
                         st.write("受注目標または前年客数が不足しており、店舗の調子を判定できません。")
                     if not _diaries.empty and _watch:
                         _recent = _diaries[
                             (_diaries["店舗名"] == _watch[0]["name"]) &
                             (_diaries["日付"].dt.date <= _target_cutoff_date) &
-                            (_diaries["日付"].dt.date >= _target_cutoff_date - _dt_mtd.timedelta(days=7))
+                            (_diaries["日付"].dt.date >= _target_cutoff_date - _dt_mtd.timedelta(days=6))
                         ].sort_values("日付", ascending=False)
                         if not _recent.empty:
                             _diary = _recent.iloc[0]
