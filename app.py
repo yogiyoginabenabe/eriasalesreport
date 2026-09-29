@@ -1167,7 +1167,7 @@ _prev_bytes  = _get_bytes(uploaded_prev,         '_csv_bytes_prev')
 _tsales_bytes = _get_bytes(uploaded_target_sales, '_csv_bytes_tsales')
 _tzasu_bytes  = _get_bytes(uploaded_target_zasu,  '_csv_bytes_tzasu')
 
-# ───────────────────────────��─────────────────
+# ─────────────────────────────────────────────
 # ② long形式DataFrameをsession_stateにキャッシュ
 #    ページ遷移しても再計算しない
 # ─────────────────────────────────────────────
@@ -2119,7 +2119,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
         _tidx2 = st.session_state.get('_target_index', {})
 
         def get_store_target_period(sname, metric):
-            """選択期間内の目標��計を返す（インデックス高速版）"""
+            """選択期間内の目標合計を返す（インデックス高速版）"""
             if metric not in ['受注金額(税抜)', '座数']:
                 return None
             total = 0.0
@@ -2274,7 +2274,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                 html_parts.append('<th class="ov-th">前年</th><th class="ov-th">前年比</th>')
         html_parts.append('</tr></thead><tbody>')
     
-        # ���リア合計
+        # エリア合計
         # 代行会社で絞り込み中はエリアトータルを非表示（代行会社行と同じ数字になるため）
         if selected_agency == 'すべて':
             html_parts.append(make_row_html("🔢 エリアトータル", selected_stores, "ov-total"))
