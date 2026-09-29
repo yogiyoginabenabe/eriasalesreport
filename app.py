@@ -1167,7 +1167,7 @@ _prev_bytes  = _get_bytes(uploaded_prev,         '_csv_bytes_prev')
 _tsales_bytes = _get_bytes(uploaded_target_sales, '_csv_bytes_tsales')
 _tzasu_bytes  = _get_bytes(uploaded_target_zasu,  '_csv_bytes_tzasu')
 
-# ─────────────────────────────────────────────
+# ───────────────────────────��─────────────────
 # ② long形式DataFrameをsession_stateにキャッシュ
 #    ページ遷移しても再計算しない
 # ─────────────────────────────────────────────
@@ -1543,8 +1543,101 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                     _delta_str = f'前年比MTD {_yoy:.1f}%'
                     _delta_color = 'normal' if _yoy >= 100 else ('off' if _yoy >= 90 else 'inverse')
             _kpi_cols[_ki].metric(f'{_icon} {_metric}', _label, delta=_delta_str, delta_color=_delta_color)
-        # TOPはエリア全体KPIのみ表示する。旧ランキングは利用しないため、
-        # ここでTOPページの描画を終了する。
+        # マスタ編集の所属区分をそのまま使い、A/Bを同じ締め日と判定基準で比較する。
+        from top_insights import build_area_insights
+
+        _area_data = build_area_insights(
+            master_df, _top_long_now, _top_prev,
+            st.session_state.targets, _target_cutoff_date,
+        )
+        st.markdown("### 📍 渡邊_A／渡邊_B 実績比較")
+        st.caption(f"{_target_cutoff_date:%Y/%m/%d}までの月間累計｜判定：受注MTD目標比と客数前年比。前年はTOP KPIと同じ比較期間です。")
+
+        @st.cache_data(ttl=300, show_spinner=False)
+        def _top_manager_reports():
+            try:
+                values = _db_worksheet("manager_reports", rows=1000, cols=7).get_all_values()
+                if len(values) < 2:
+                    return pd.DataFrame()
+                reports = pd.DataFrame(values[1:], columns=values[0])
+                if not {"日付", "店舗名", "グッド！", "オポチュニティ↑"}.issubset(reports.columns):
+                    return pd.DataFrame()
+                reports["日付"] = pd.to_datetime(reports["日付"], errors="coerce")
+                return reports.dropna(subset=["日付", "店舗名"])
+            except Exception:
+                return pd.DataFrame()
+
+        _diaries = _top_manager_reports()
+
+        def _pct(value):
+            return f"{value:.1f}%" if value is not None else "比較不可"
+
+        for _col, _area in zip(st.columns(2), ("渡邊_A", "渡邊_B")):
+            with _col:
+                _info = _area_data[_area]
+                with st.container(border=True):
+                    st.subheader(f"{_area}　｜　{len(_info['stores'])}店舗")
+                    _sales_col, _visitor_col = st.columns(2)
+                    _sales_col.metric("受注金額（税抜）", f"{_info['sales']:,.0f}円",
+                                      f"目標比 {_pct(_info['sales_pct'])}", delta_color="off")
+                    _visitor_col.metric("客数", f"{_info['visitors']:,.0f}人",
+                                        f"前年比 {_pct(_info['visitor_pct'])}", delta_color="off")
+                    _rows = _info["stores"]
+                    _good = sorted((r for r in _rows if r["status"] == "好調"),
+                                   key=lambda r: (r["sales_pct"], r["visitor_pct"]), reverse=True)[:3]
+                    _watch = sorted((r for r in _rows if r["status"] in ("要確認", "集客維持・売上未達", "売上達成・客数減")),
+                                    key=lambda r: (r["status"] != "要確認", r["sales_pct"] or 0))[:3]
+
+                    def _store_line(row):
+                        return (f"**{row['name']}**　受注 {_pct(row['sales_pct'])} ／ "
+                                f"客数 {_pct(row['visitor_pct'])}  \n"
+                                f"補助指標：{row['signals']}")
+
+                    st.markdown("**🟢 好調店舗**")
+                    if _good:
+                        for _row in _good:
+                            st.markdown(_store_line(_row))
+                    else:
+                        st.caption("両指標が100%以上の店舗はありません。")
+                    st.markdown("**🔴 注目店舗**")
+                    if _watch:
+                        for _row in _watch:
+                            st.markdown(f"{_row['status']}｜{_store_line(_row)}")
+                    else:
+                        st.caption("判定可能な要確認店舗はありません。")
+
+                    st.markdown("**📝 エリアサマリー**")
+                    _known = [r for r in _rows if r["status"] != "比較データ不足"]
+                    if _known:
+                        _good_n = sum(r["status"] == "好調" for r in _known)
+                        _watch_n = sum(r["status"] == "要確認" for r in _known)
+                        st.write(
+                            f"受注MTD目標比は{_pct(_info['sales_pct'])}、客数前年比は"
+                            f"{_pct(_info['visitor_pct'])}。比較可能な{len(_known)}店舗のうち、"
+                            f"両指標達成は{_good_n}店舗、両指標未達は{_watch_n}店舗です。"
+                        )
+                        if _watch:
+                            _lead = _watch[0]
+                            st.write(f"まず{_lead['name']}を確認してください。数値上の補助指標は{_lead['signals']}です。")
+                    else:
+                        st.write("受注目標または前年客数が不足しており、店舗の調子を判定できません。")
+                    if not _diaries.empty and _watch:
+                        _recent = _diaries[
+                            (_diaries["店舗名"] == _watch[0]["name"]) &
+                            (_diaries["日付"].dt.date <= _target_cutoff_date) &
+                            (_diaries["日付"].dt.date >= _target_cutoff_date - _dt_mtd.timedelta(days=7))
+                        ].sort_values("日付", ascending=False)
+                        if not _recent.empty:
+                            _diary = _recent.iloc[0]
+                            _note = str(_diary.get("オポチュニティ↑", "") or "").strip()
+                            if not _note or _note.lower() == "nan":
+                                _note = str(_diary.get("グッド！", "") or "").strip()
+                            if _note and _note.lower() != "nan":
+                                st.caption(f"日報記載（{_diary['日付']:%m/%d}・{_lead['name']}）：{_note[:140]}")
+                    if len(_known) < len(_rows):
+                        st.caption(f"比較データ不足：{len(_rows) - len(_known)}店舗")
+
+        # 旧ランキングは利用しないため、ここでTOPページの描画を終了する。
         st.stop()
 
         st.markdown('### 🏆 本日時点 ランキング（上位10店舗）')
@@ -2026,7 +2119,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
         _tidx2 = st.session_state.get('_target_index', {})
 
         def get_store_target_period(sname, metric):
-            """選択期間内の目標合計を返す（インデックス高速版）"""
+            """選択期間内の目標��計を返す（インデックス高速版）"""
             if metric not in ['受注金額(税抜)', '座数']:
                 return None
             total = 0.0
@@ -2181,7 +2274,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                 html_parts.append('<th class="ov-th">前年</th><th class="ov-th">前年比</th>')
         html_parts.append('</tr></thead><tbody>')
     
-        # エリア合計
+        # ���リア合計
         # 代行会社で絞り込み中はエリアトータルを非表示（代行会社行と同じ数字になるため）
         if selected_agency == 'すべて':
             html_parts.append(make_row_html("🔢 エリアトータル", selected_stores, "ov-total"))
