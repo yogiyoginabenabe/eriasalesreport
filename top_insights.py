@@ -1,6 +1,17 @@
 """TOP dashboard area comparison, using the same MTD scope as the KPI cards."""
 
 import pandas as pd
+import math
+
+
+def classify(sales_pct, visitor_pct):
+    if sales_pct is None or visitor_pct is None:
+        return "比較データ不足"
+    if sales_pct >= 100 and visitor_pct >= 100:
+        return "好調"
+    if sales_pct < 100 and visitor_pct < 100:
+        return "要確認"
+    return "売上達成・客数減" if sales_pct >= 100 else "集客維持・売上未達"
 
 
 def build_area_insights(master, actual, previous, targets, cutoff):
@@ -14,7 +25,7 @@ def build_area_insights(master, actual, previous, targets, cutoff):
         return float(pd.to_numeric(subset["値"], errors="coerce").sum())
 
     def ratio(value, baseline):
-        return value / baseline * 100 if baseline > 0 else None
+        return value / baseline * 100 if value is not None and baseline > 0 and math.isfinite(baseline) else None
 
     def target_for(name):
         prefix = f"{name}_受注金額(税抜)_"
@@ -46,16 +57,12 @@ def build_area_insights(master, actual, previous, targets, cutoff):
             prior_visitors = total(previous, [name], "客数")
             target = target_for(name)
             sales_pct, visitor_pct = ratio(sales, target), ratio(visitors, prior_visitors)
-            if sales_pct is None or visitor_pct is None:
-                status = "比較データ不足"
-            elif sales_pct >= 100 and visitor_pct >= 100:
-                status = "好調"
-            elif sales_pct < 100 and visitor_pct < 100:
-                status = "要確認"
-            elif sales_pct >= 100:
-                status = "売上達成・客数減"
-            else:
-                status = "集客維持・売上未達"
+            present = set(actual.loc[actual["店舗名"] == name, "指標"])
+            if "受注金額(税抜)" not in present:
+                sales_pct = None
+            if "客数" not in present:
+                visitor_pct = None
+            status = classify(sales_pct, visitor_pct)
             seats = total(actual, [name], "座数")
             prior_seats = total(previous, [name], "座数")
             pieces = total(actual, [name], "品数")
@@ -75,16 +82,35 @@ def build_area_insights(master, actual, previous, targets, cutoff):
                     signals.append(f"品数前年比{pieces / prior_pieces * 100:.0f}%")
                 if prior_sales > 0:
                     signals.append(f"客単価前年比{(sales / visitors) / (prior_sales / prior_visitors) * 100:.0f}%")
+            reasons = []
+            if prior_seats > 0 and prior_visitors > 0:
+                seat_yoy = seats / prior_seats * 100
+                if seat_yoy < 100 and visitor_pct is not None and visitor_pct < 100:
+                    reasons.append("座数と購入客数がともに前年を下回っています。体験提供の状況を確認したい店舗です。")
+                elif seat_yoy >= 100 and visitor_pct is not None and visitor_pct < 100:
+                    reasons.append("座数は前年を維持していますが購入客数が減っています。体験から購入へのつながりを確認したい店舗です。")
+                elif seat_yoy >= 100 and visitor_pct is not None and visitor_pct >= 100:
+                    reasons.append("座数と購入客数がともに前年以上で推移しています。")
+            prior_sales = total(previous, [name], "受注金額(税抜)")
+            if visitors > 0 and prior_visitors > 0 and prior_sales > 0:
+                ticket_yoy = (sales / visitors) / (prior_sales / prior_visitors) * 100
+                if ticket_yoy < 100:
+                    reasons.append("客単価が前年を下回っています。購入商品の構成やセット提案を確認する余地があります。")
+                elif ticket_yoy > 100:
+                    reasons.append("客単価の前年超えが、受注実績を支えています。")
             rows.append({"name": name, "sales": sales, "visitors": visitors,
                          "target": target, "sales_pct": sales_pct,
                          "visitor_pct": visitor_pct, "status": status,
+                         "reason": " ".join(reasons) or "補助KPIだけでは背景を判断できません。日報と店舗状況の確認が必要です。",
                          "signals": "・".join(signals) or "補助KPIの比較データなし"})
         area_sales = sum(r["sales"] for r in rows)
         area_target = sum(r["target"] for r in rows)
+        target_complete = bool(rows) and all(r["sales_pct"] is not None for r in rows)
+        visitors_complete = bool(rows) and all(r["visitor_pct"] is not None for r in rows)
         area_visitors = sum(r["visitors"] for r in rows)
         area_prior_visitors = total(previous, names, "客数")
         result[area] = {"stores": rows, "sales": area_sales,
-                        "sales_pct": ratio(area_sales, area_target),
-                        "visitor_pct": ratio(area_visitors, area_prior_visitors),
+                        "sales_pct": ratio(area_sales, area_target) if target_complete else None,
+                        "visitor_pct": ratio(area_visitors, area_prior_visitors) if visitors_complete else None,
                         "visitors": area_visitors}
     return result
