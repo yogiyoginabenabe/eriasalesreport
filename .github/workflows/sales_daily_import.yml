@@ -6,6 +6,7 @@ on:
     paths:
       - scripts/store_report_daily.py
       - scripts/report_missing_check.py
+      - scripts/cast_activity_daily.py
       - .github/workflows/sales_daily_import.yml
   schedule:
     # 店舗分析側の確定時刻にばらつきがあるため、朝に再試行する。
@@ -115,6 +116,10 @@ jobs:
             # 定期実行と空欄の手動実行は、翌朝に前日分を取得する。
             python scripts/store_report_daily.py --recent-days 3
           fi
+
+      - name: Download and upsert cast activity including prior year
+        if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'push' || inputs.manager_report_start == '') }}
+        run: python scripts/cast_activity_daily.py
 
       - name: Download and upsert manager reports
         if: ${{ github.event_name == 'schedule' || inputs.manager_report_start != '' || (inputs.summary_start == '' && inputs.backfill_start_month == '') }}
