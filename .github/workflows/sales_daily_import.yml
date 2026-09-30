@@ -1,6 +1,12 @@
 name: Yogibo store report daily import
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/store_report_daily.py
+      - scripts/report_missing_check.py
+      - .github/workflows/sales_daily_import.yml
   schedule:
     # 店舗分析側の確定時刻にばらつきがあるため、朝に再試行する。
     # 同じ店舗・日付・指標はupsertされるので重複しない。
@@ -83,7 +89,7 @@ jobs:
           python -m playwright install --with-deps chromium
 
       - name: Download and upsert daily sales
-        if: ${{ github.event_name == 'schedule' || inputs.manager_report_start == '' }}
+        if: ${{ github.event_name == 'schedule' || github.event_name == 'push' || inputs.manager_report_start == '' }}
         shell: bash
         run: |
           # サマリー画面からの実行では、比較用の週別・月別データを取得する。
