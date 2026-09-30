@@ -1559,17 +1559,19 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
 
         from cast_insights import activity_windows, activity_value, activity_yoy
 
-        @st.cache_data(ttl=30, show_spinner=False)
-        def _top_cast_activity():
-            try:
-                values = _db_worksheet("cast_activity_history", rows=1000, cols=7).get_all_values()
-                if len(values) < 2 or not {"店舗名", "指標", "値", "日付"}.issubset(values[0]):
-                    return pd.DataFrame()
-                return pd.DataFrame(values[1:], columns=values[0])
-            except Exception:
-                return pd.DataFrame()
-
-        _cast_now, _cast_prev = activity_windows(_top_cast_activity(), _target_cutoff_date, selected_stores)
+        # 日別全件の読み込みを避け、同じ期間で保存された店舗別集計を使用する。
+        _cast_now = _top_summary_all[
+            (_top_summary_all["集計単位"] == "cast_mtd") &
+            (_top_summary_all["開始日"] == _mtd_start_iso) &
+            (_top_summary_all["終了日"] == _mtd_end_iso) &
+            (_top_summary_all["店舗名"].isin(selected_stores))
+        ].copy()
+        _cast_prev = _top_summary_all[
+            (_top_summary_all["集計単位"] == "cast_mtd_prev") &
+            (_top_summary_all["開始日"] == _prev_start_iso) &
+            (_top_summary_all["終了日"] == _prev_end_iso) &
+            (_top_summary_all["店舗名"].isin(selected_stores))
+        ].copy()
         _area_data = build_area_insights(
             master_df, _top_long_now, _top_prev,
             st.session_state.targets, _target_cutoff_date, _cast_now, _cast_prev,
