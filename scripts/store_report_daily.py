@@ -43,12 +43,12 @@ def archive_reports(client, reports, target_stores):
     columns = ["集計単位", "開始日", "終了日", "店舗コード", "元データJSON"]
     book = client.open_by_key(SALES_DB_SHEET_ID)
     try:
-        sheet = book.worksheet("sales_source_archive")
+        sheet = book.worksheet("sales_source_full_archive_v1")
     except gspread.WorksheetNotFound:
-        sheet = book.add_worksheet(title="sales_source_archive", rows=1000, cols=5)
+        sheet = book.add_worksheet(title="sales_source_full_archive_v1", rows=1000, cols=5)
     existing = sheet.get_all_values()
     if existing and existing[0] != columns:
-        raise RuntimeError("sales_source_archiveの列構成が一致しません")
+        raise RuntimeError("sales_source_full_archive_v1の列構成が一致しません")
     merged = {tuple(row[:4]): row for row in existing[1:]}
     for period, start, end, rows in reports:
         grouped = {}
