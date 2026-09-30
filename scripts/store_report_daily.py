@@ -46,9 +46,13 @@ def archive_reports(client, reports, target_stores):
         sheet = book.worksheet("sales_source_full_archive_v1")
     except gspread.WorksheetNotFound:
         sheet = book.add_worksheet(title="sales_source_full_archive_v1", rows=1000, cols=5)
-    existing = sheet.get_all_values()
-    if existing and existing[0] != columns:
-        raise RuntimeError("sales_source_full_archive_v1の列構成が一致しません")
+    existing = [row for row in sheet.get_all_values() if any(str(v).strip() for v in row)]
+    if existing:
+        header = [str(v).strip() for v in existing[0]]
+        while header and not header[-1]:
+            header.pop()
+        if header != columns:
+            raise RuntimeError(f"sales_source_full_archive_v1の列構成が一致しません: {header!r}")
     merged = {tuple(row[:4]): row for row in existing[1:]}
     for period, start, end, rows in reports:
         grouped = {}
