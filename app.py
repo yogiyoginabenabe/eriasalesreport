@@ -1557,9 +1557,22 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
         # マスタ編集の所属区分をそのまま使い、A/Bを同じ締め日と判定基準で比較する。
         from top_insights import build_area_insights, classify
 
+        from cast_insights import activity_windows, activity_value, activity_yoy
+
+        @st.cache_data(ttl=30, show_spinner=False)
+        def _top_cast_activity():
+            try:
+                values = _db_worksheet("cast_activity_history", rows=1000, cols=7).get_all_values()
+                if len(values) < 2 or not {"店舗名", "指標", "値", "日付"}.issubset(values[0]):
+                    return pd.DataFrame()
+                return pd.DataFrame(values[1:], columns=values[0])
+            except Exception:
+                return pd.DataFrame()
+
+        _cast_now, _cast_prev = activity_windows(_top_cast_activity(), _target_cutoff_date, selected_stores)
         _area_data = build_area_insights(
             master_df, _top_long_now, _top_prev,
-            st.session_state.targets, _target_cutoff_date,
+            st.session_state.targets, _target_cutoff_date, _cast_now, _cast_prev,
         )
         st.markdown("### 📍 渡邊_A／渡邊_B 実績比較")
         st.caption(f"{_target_cutoff_date:%Y/%m/%d}までの月間累計｜判定：受注MTD目標比と客数前年比。前年はTOP KPIと同じ比較期間です。")
@@ -1602,7 +1615,20 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                                       f"目標比 {_pct(_info['sales_pct'])}", delta_color="off")
                     _visitor_col.metric("客数（購入者数）", f"{_info['visitors']:,.0f}人",
                                         f"前年比 {_pct(_info['visitor_pct'])}", delta_color="off")
-                    st.caption("8ステップ：自動取得の接続待ち。接続後、同じ集計期間の実施数を表示します。")
+                    _activity_names = [r["name"] for r in _info["stores"]]
+                    _activity_cols = st.columns(3)
+                    for _activity_col, _activity_metric, _activity_unit in zip(
+                        _activity_cols, ("8ステップ数", "勤務時間(h)", "名刺配布枚数(枚)"), ("回", "h", "枚")
+                    ):
+                        _activity_now = activity_value(_cast_now, _activity_names, _activity_metric)
+                        _activity_prior = activity_value(_cast_prev, _activity_names, _activity_metric)
+                        _activity_rate = activity_yoy(_activity_now, _activity_prior)
+                        _activity_label = "取得待ち" if _activity_now is None else (f"{_activity_now:,.1f}h" if _activity_unit == "h" else f"{_activity_now:,.0f}{_activity_unit}")
+                        _activity_col.metric(_activity_metric, _activity_label,
+                            delta=f"前年比 {_activity_rate:.0f}%" if _activity_rate is not None else None,
+                            delta_color="off")
+                    _activity_known = sum(r["steps"] is not None for r in _info["stores"])
+                    st.caption(f"キャスト日別CSV｜同じ締め日まで集計｜8ステップ取得済み {_activity_known}/{len(_activity_names)}店舗")
                     _rows = _info["stores"]
                     _good = sorted((r for r in _rows if r["status"] == "好調"),
                                    key=lambda r: (r["sales_pct"], r["visitor_pct"]), reverse=True)[:3]
