@@ -1477,12 +1477,18 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
         _top_long_now["日付_原本"] = _top_long_now["終了日"]
         _top_long_now["月日"] = _target_cutoff_date.strftime("%m/%d")
         _top_long_now["年度"] = "実績"
-        # 前年も単一MTD集計の終了日までに揃える。スナップショットの日付だけで比較しない。
-        _mtd_calendar = pd.date_range(_mtd_start_iso, _mtd_end_iso).strftime("%m/%d")
-        if not _top_long_prev.empty:
-            _reverse = get_yoy_prev_days_from_prev(list(_top_long_prev["月日"].unique()), mode="dow")
-            _prev_days = {_reverse[d] for d in _mtd_calendar if d in _reverse}
-            _top_prev = _top_long_prev[_top_long_prev["月日"].isin(_prev_days)].copy()
+        # 当年と同じ締め日の52週前を、自動取得DBの単一期間から読む。
+        _prev_start_iso = (_dt_mtd.date.fromisoformat(_mtd_start_iso) - _dt_mtd.timedelta(weeks=52)).isoformat()
+        _prev_end_iso = (_target_cutoff_date - _dt_mtd.timedelta(weeks=52)).isoformat()
+        _top_prev = _top_summary_all[
+            (_top_summary_all["集計単位"] == "mtd_prev") &
+            (_top_summary_all["開始日"] == _prev_start_iso) &
+            (_top_summary_all["終了日"] == _prev_end_iso) &
+            (_top_summary_all["店舗名"].isin(selected_stores))
+        ].drop_duplicates(["店舗コード", "指標"], keep="last").copy()
+        if _top_prev.empty:
+            st.warning(f"前年データ取得待ち（{_prev_start_iso}〜{_prev_end_iso}）。未取得の指標は比較データ不足として扱います。")
+        st.caption(f"前年比較期間：{_prev_start_iso}〜{_prev_end_iso}（52週前・同曜日）")
         if _target_cutoff_date < _yesterday:
             st.caption(f"MTD集計は{_target_cutoff_date:%Y/%m/%d}まで。目標・前年比較もこの日までに揃えています。")
 
@@ -3927,3 +3933,4 @@ elif st.session_state.get('current_page', 'summary') == 'master':
             st.session_state.stores = remaining
             st.success(f"{n_checked} 店舗を削除しました。残り {len(remaining)} 店舗。")
             st.rerun()
+
