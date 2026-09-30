@@ -14,7 +14,7 @@ def classify(sales_pct, visitor_pct):
     return "売上達成・客数減" if sales_pct >= 100 else "集客維持・売上未達"
 
 
-def build_area_insights(master, actual, previous, targets, cutoff):
+def build_area_insights(master, actual, previous, targets, cutoff, activity=None, previous_activity=None):
     """Return area summaries and store rows; missing comparisons stay unclassified."""
     result = {}
     actual = actual if not actual.empty else pd.DataFrame(columns=["店舗名", "指標", "値"])
@@ -68,6 +68,15 @@ def build_area_insights(master, actual, previous, targets, cutoff):
             pieces = total(actual, [name], "品数")
             prior_pieces = total(previous, [name], "品数")
             signals = []
+            from cast_insights import activity_value, activity_yoy
+            steps = activity_value(activity, [name], "8ステップ数")
+            prior_steps = activity_value(previous_activity, [name], "8ステップ数")
+            steps_yoy = activity_yoy(steps, prior_steps)
+            hours = activity_value(activity, [name], "勤務時間(h)")
+            if steps is not None:
+                signals.append(f"8ステップ{steps:,.0f}回" + (f"・前年比{steps_yoy:.0f}%" if steps_yoy is not None else ""))
+            if hours is not None:
+                signals.append(f"勤務時間{hours:,.1f}h")
             if prior_seats > 0:
                 signals.append(f"座数前年比{seats / prior_seats * 100:.0f}%")
             current_cvr = actual[(actual["店舗名"] == name) & (actual["指標"] == "CVR")]
@@ -83,6 +92,8 @@ def build_area_insights(master, actual, previous, targets, cutoff):
                 if prior_sales > 0:
                     signals.append(f"客単価前年比{(sales / visitors) / (prior_sales / prior_visitors) * 100:.0f}%")
             reasons = []
+            if steps_yoy is not None and prior_seats > 0 and steps_yoy < 100 and seats < prior_seats:
+                reasons.append("8ステップと座数がともに前年を下回っています。体験提供の活動量を確認してください。")
             if prior_seats > 0 and prior_visitors > 0:
                 seat_yoy = seats / prior_seats * 100
                 if seat_yoy < 100 and visitor_pct is not None and visitor_pct < 100:
@@ -101,6 +112,7 @@ def build_area_insights(master, actual, previous, targets, cutoff):
             rows.append({"name": name, "sales": sales, "visitors": visitors,
                          "target": target, "sales_pct": sales_pct,
                          "visitor_pct": visitor_pct, "status": status,
+                         "steps": steps, "steps_yoy": steps_yoy, "hours": hours,
                          "reason": " ".join(reasons) or "補助KPIだけでは背景を判断できません。日報と店舗状況の確認が必要です。",
                          "signals": "・".join(signals) or "補助KPIの比較データなし"})
         area_sales = sum(r["sales"] for r in rows)
