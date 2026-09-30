@@ -15,7 +15,7 @@ import gspread
 from playwright.sync_api import sync_playwright
 
 import report_missing_check as staff
-from store_report_daily import google_client, load_target_stores, SALES_DB_SHEET_ID, log
+from store_report_daily import google_client, load_target_stores, SALES_DB_SHEET_ID, log, to_summary_cache_rows, upsert_summary_cache
 
 TAB = "cast_activity_history"
 COLUMNS = ["店舗名", "店舗コード", "代行会社", "エリア", "日付", "指標", "値"]
@@ -139,6 +139,21 @@ def save(client, incoming, ranges):
     log(f"キャスト店舗別保存完了: {len(incoming)}行 / 当年・前年データ")
 
 
+def save_summaries(client, incoming, stores, ranges):
+    output = []
+    for period, (start, end) in zip(("cast_mtd", "cast_mtd_prev"), ranges):
+        grouped = {}
+        for row in incoming:
+            if not start.isoformat() <= row[4] <= end.isoformat():
+                continue
+            result = grouped.setdefault(row[1], {"店舗コード": row[1]})
+            result[row[5]] = result.get(row[5], 0) + float(row[6])
+        output.extend(to_summary_cache_rows(list(grouped.values()), stores, period,
+                                           start.strftime("%Y%m%d"), end.strftime("%Y%m%d")))
+    retry(lambda: upsert_summary_cache(client, output))
+    log(f"キャストTOP集計保存完了: {len(output)}行")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--start", help="YYYY-MM-DD。省略時は月初")
@@ -164,6 +179,7 @@ def main():
         finally:
             browser.close()
     save(client, incoming, ranges)
+    save_summaries(client, incoming, stores, ranges)
 
 
 if __name__ == "__main__":
