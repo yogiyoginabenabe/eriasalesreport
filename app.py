@@ -1459,27 +1459,32 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
 
         # TOPは日別履歴の足し上げではなく、同じ日次バッチが保存した
         # 月初〜最新日の単一集計を使用し、累計スナップショットの二重加算を防ぐ。
-        try:
-            _top_summary_all = _load_summary_cache_from_db()
-            _mtd_start_iso = _target_cutoff_date.replace(day=1).isoformat()
-            _mtd_end_iso = _target_cutoff_date.isoformat()
-            _top_mtd_cache = _top_summary_all[
-                (_top_summary_all["集計単位"] == "mtd") &
-                (_top_summary_all["開始日"] == _mtd_start_iso) &
-                (_top_summary_all["終了日"] == _mtd_end_iso) &
-                (_top_summary_all["店舗名"].isin(selected_stores))
-            ].copy()
-            if not _top_mtd_cache.empty:
-                _top_long_now = _top_mtd_cache.rename(columns={"終了日": "日付_原本"})
-                _top_long_now["日付_原本"] = pd.to_datetime(
-                    _top_long_now["日付_原本"], errors="coerce"
-                ).dt.strftime("%Y/%m/%d")
-                _top_long_now["月日"] = pd.to_datetime(
-                    _top_mtd_cache["終了日"], errors="coerce"
-                ).dt.strftime("%m/%d")
-                _top_long_now["年度"] = "実績"
-        except Exception:
-            pass
+        _top_summary_all = _load_summary_cache_from_db()
+        _mtd_start_iso = _yesterday.replace(day=1).isoformat()
+        _available_mtd = _top_summary_all[
+            (_top_summary_all["集計単位"] == "mtd") &
+            (_top_summary_all["開始日"] == _mtd_start_iso) &
+            (_top_summary_all["終了日"] <= _yesterday.isoformat()) &
+            (_top_summary_all["店舗名"].isin(selected_stores))
+        ].copy()
+        if _available_mtd.empty:
+            st.warning("月間累計の集計データを取得待ちです。累計実績の重複合算を避けるため、TOPの数値は表示していません。")
+            st.stop()
+        _mtd_end_iso = _available_mtd["終了日"].max()
+        _target_cutoff_date = _dt_mtd.date.fromisoformat(_mtd_end_iso)
+        _top_long_now = _available_mtd[_available_mtd["終了日"] == _mtd_end_iso].copy()
+        _top_long_now = _top_long_now.drop_duplicates(["店舗名", "指標"], keep="last")
+        _top_long_now["日付_原本"] = _top_long_now["終了日"]
+        _top_long_now["月日"] = _target_cutoff_date.strftime("%m/%d")
+        _top_long_now["年度"] = "実績"
+        # 前年も単一MTD集計の終了日までに揃える。スナップショットの日付だけで比較しない。
+        _mtd_calendar = pd.date_range(_mtd_start_iso, _mtd_end_iso).strftime("%m/%d")
+        if not _top_long_prev.empty:
+            _reverse = get_yoy_prev_days_from_prev(list(_top_long_prev["月日"].unique()), mode="dow")
+            _prev_days = {_reverse[d] for d in _mtd_calendar if d in _reverse}
+            _top_prev = _top_long_prev[_top_long_prev["月日"].isin(_prev_days)].copy()
+        if _target_cutoff_date < _yesterday:
+            st.caption(f"MTD集計は{_target_cutoff_date:%Y/%m/%d}まで。目標・前年比較もこの日までに揃えています。")
 
         _filtered_targets = {}
         for _fk, _fv in st.session_state.targets.items():
