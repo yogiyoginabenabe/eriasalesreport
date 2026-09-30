@@ -26,6 +26,66 @@ METRICS = ["受注金額(税抜)", "座数", "客数", "CVR", "客単価", "品�
 TARGET_AMS = {"渡邊_A", "渡邊_B"}
 
 
+def available_metrics(row):
+    """保存対象は既知6指標に限定せず、CSV内の数値列をすべて保持する。"""
+    excluded = {"日付", "店舗コード", "店舗名", "店舗ID", "エリア", "代行会社"}
+    for name, value in row.items():
+        if not name or name in excluded or str(value or "").strip() in {"", "-", "—"}:
+            continue
+        try:
+            yield name, numeric_value(value)
+        except (ValueError, TypeError):
+            continue
+
+
+def archive_reports(client, reports, target_stores):
+    """全列をJSONで永続保存。数値以外の列や追加列も復元できる。"""
+    columns = ["集計単位", "開始日", "終了日", "店舗コード", "元データJSON"]
+    book = client.open_by_key(SALES_DB_SHEET_ID)
+    try:
+        sheet = book.worksheet("sales_source_archive")
+    except gspread.WorksheetNotFound:
+        sheet = book.add_worksheet(title="sales_source_archive", rows=1000, cols=5)
+    existing = sheet.get_all_values()
+    if existing and existing[0] != columns:
+        raise RuntimeError("sales_source_archiveの列構成が一致しません")
+    merged = {tuple(row[:4]): row for row in existing[1:]}
+    for period, start, end, rows in reports:
+        grouped = {}
+        for row in rows:
+            code = str(row.get("店舗コード", "")).strip()
+            if code in target_stores:
+                grouped.setdefault(code, []).append(row)
+        for code, source in grouped.items():
+            key = (period, start, end, code)
+            merged[key] = [*key, json.dumps(source, ensure_ascii=False)]
+    output = [columns] + list(merged.values())
+    if sheet.row_count < len(output) + 10:
+        sheet.resize(rows=len(output) + 10)
+    for offset in range(0, len(output), 1000):
+        sheet.update(range_name=f"A{offset + 1}", values=output[offset:offset + 1000], value_input_option="RAW")
+    log(f"全列元データ保存完了: {len(merged)}店舗期間")
+
+
+def aggregate_daily_rows(rows):
+    """月をまたぐ前年MTDを日別から集計。比率は分子・分母で再計算。"""
+    grouped = {}
+    unique = {(str(r.get("店舗コード", "")), str(r.get("日付", ""))): r for r in rows}
+    for row in unique.values():
+        code = str(row.get("店舗コード", ""))
+        result = grouped.setdefault(code, {"店舗コード": code})
+        for metric, value in available_metrics(row):
+            if metric in {"CVR", "客単価"} or "%" in str(row.get(metric, "")):
+                continue
+            result[metric] = result.get(metric, 0.0) + value
+    for row in grouped.values():
+        if row.get("客数", 0) > 0 and "受注金額(税抜)" in row:
+            row["客単価"] = row["受注金額(税抜)"] / row["客数"]
+        if row.get("座数", 0) > 0 and "客数" in row:
+            row["CVR"] = row["客数"] / row["座数"] * 100
+    return list(grouped.values())
+
+
 def log(message: str) -> None:
     print(f"[{datetime.now(ZoneInfo('Asia/Tokyo')):%Y-%m-%d %H:%M:%S}] {message}", flush=True)
 
@@ -126,10 +186,10 @@ def to_history_rows(csv_rows, target_stores, fallback_ymd):
             continue
         master = target_stores[code]
         report_date = normalize_date(csv_row.get("日付", ""), fallback_ymd)
-        for metric in METRICS:
+        for metric, value in available_metrics(csv_row):
             result.append([
                 master["店舗名"], code, master["代行会社"], master["エリア"],
-                report_date, metric, numeric_value(csv_row.get(metric, "")),
+                report_date, metric, value,
             ])
     if not result:
         raise RuntimeError("取得CSVに担当店舗のデータがありません")
@@ -232,12 +292,12 @@ def to_summary_cache_rows(csv_rows, target_stores, period, start_ymd, end_ymd):
         if code not in target_stores:
             continue
         master = target_stores[code]
-        for metric in METRICS:
+        for metric, value in available_metrics(csv_row):
             key = (period, start_iso, end_iso, code, metric)
             rows_by_key[key] = [
                 period, start_iso, end_iso, master["店舗名"], code,
                 master["代行会社"], master["エリア"], metric,
-                numeric_value(csv_row.get(metric, "")),
+                value,
             ]
     if not rows_by_key:
         raise RuntimeError("取得CSVに担当店舗の集計データがありません")
@@ -359,6 +419,8 @@ def main() -> None:
     all_csv_rows = []
 
     current_mtd_summary = None
+    previous_mtd_summary = None
+    source_reports = []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         context = browser.new_context(locale="ja-JP", timezone_id="Asia/Tokyo")
@@ -379,6 +441,7 @@ def main() -> None:
                 (debug_dir / f"store-report-{report_period}-{start_ymd}-{end_ymd}.csv").write_bytes(raw)
                 try:
                     rows = report_api.parse_report_csv(raw)
+                    source_reports.append((report_period, start_ymd, end_ymd, rows))
                     if args.summary_start:
                         rows = [(start_ymd, end_ymd, row) for row in rows]
                     else:
@@ -407,7 +470,8 @@ def main() -> None:
 
             # TOPは同じ実行で取得した月初〜前日の単一集計を正本にする。
             if not args.summary_start and (args.yesterday or args.recent_days):
-                mtd_start, mtd_end = periods[0][0], periods[-1][1]
+                mtd_end = periods[-1][1]
+                mtd_start = mtd_end[:6] + "01"
                 log(f"TOP MTD取得中: {mtd_start}〜{mtd_end}（m）")
                 raw = report_api.fetch_report_csv(page, mtd_start, mtd_end, period="m")
                 (debug_dir / f"store-report-m-{mtd_start}-{mtd_end}.csv").write_bytes(raw)
@@ -415,6 +479,17 @@ def main() -> None:
                     mtd_start, mtd_end, report_api.parse_report_csv(raw)
                 )
                 log(f"TOP MTD取得完了: {len(current_mtd_summary[2])}行")
+                source_reports.append(("mtd", mtd_start, mtd_end, current_mtd_summary[2]))
+                prev_start, prev_end = previous_summary_range(mtd_start, mtd_end, "w")
+                raw = report_api.fetch_report_csv(page, prev_start, prev_end, period="m")
+                previous_mtd_summary = (prev_start, prev_end, report_api.parse_report_csv(raw))
+                source_reports.append(("mtd_prev", prev_start, prev_end, previous_mtd_summary[2]))
+                # 将来の日別分析用にも全列を保存。日別履歴の月替わり削除とは独立。
+                raw_daily = report_api.fetch_report_csv(page, prev_start, prev_end, period="d")
+                prev_daily_rows = report_api.parse_report_csv(raw_daily)
+                source_reports.append(("d", prev_start, prev_end, prev_daily_rows))
+                previous_mtd_summary = (prev_start, prev_end, aggregate_daily_rows(prev_daily_rows))
+                log(f"前年全指標取得完了: {prev_start}〜{prev_end}")
         except Exception:
             page.screenshot(path=str(debug_dir / "failure.png"), full_page=True)
             (debug_dir / "failure_url.txt").write_text(page.url, encoding="utf-8")
@@ -428,6 +503,7 @@ def main() -> None:
 
     client = google_client()
     target_stores = load_target_stores(client)
+    archive_reports(client, source_reports, target_stores)
     if args.summary_start:
         summary_rows = []
         grouped = {}
@@ -460,6 +536,11 @@ def main() -> None:
                 f"TOP MTD保存完了: 受注合計 {sales_total:,.0f}円 / "
                 f"新規 {s_inserted}行 / 更新 {s_updated}行"
             )
+        if previous_mtd_summary:
+            prev_start, prev_end, prev_rows = previous_mtd_summary
+            upsert_summary_cache(client, to_summary_cache_rows(
+                prev_rows, target_stores, "mtd_prev", prev_start, prev_end
+            ))
 
 
 if __name__ == "__main__":
