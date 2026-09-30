@@ -1555,7 +1555,11 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                     _delta_color = 'normal' if _yoy >= 100 else ('off' if _yoy >= 90 else 'inverse')
             _kpi_cols[_ki].metric(f'{_icon} {_metric}', _label, delta=_delta_str, delta_color=_delta_color)
         # マスタ編集の所属区分をそのまま使い、A/Bを同じ締め日と判定基準で比較する。
-        from top_insights import build_area_insights, classify
+        import importlib
+        import top_insights as _top_insights_module
+        _top_insights_module = importlib.reload(_top_insights_module)
+        build_area_insights = _top_insights_module.build_area_insights
+        classify = _top_insights_module.classify
 
         from cast_insights import activity_windows, activity_value, activity_yoy
 
@@ -3961,4 +3965,3 @@ elif st.session_state.get('current_page', 'summary') == 'master':
             st.session_state.stores = remaining
             st.success(f"{n_checked} 店舗を削除しました。残り {len(remaining)} 店舗。")
             st.rerun()
-
