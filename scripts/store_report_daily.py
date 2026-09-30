@@ -55,9 +55,11 @@ def archive_reports(client, reports, target_stores):
         for row in rows:
             code = str(row.get("店舗コード", "")).strip()
             if code in target_stores:
-                grouped.setdefault(code, []).append(row)
-        for code, source in grouped.items():
-            key = (period, start, end, code)
+                # 日別は日付単位で保持し、期間が重なる再取得でも増殖させない。
+                source_date = normalize_date(row.get("日付", ""), start) if period == "d" else ""
+                grouped.setdefault((code, source_date), []).append(row)
+        for (code, source_date), source in grouped.items():
+            key = (period, source_date or start, source_date or end, code)
             merged[key] = [*key, json.dumps(source, ensure_ascii=False)]
     output = [columns] + list(merged.values())
     if sheet.row_count < len(output) + 10:
