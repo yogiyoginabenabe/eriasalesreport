@@ -1591,6 +1591,7 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                                       f"目標比 {_pct(_info['sales_pct'])}", delta_color="off")
                     _visitor_col.metric("客数（購入者数）", f"{_info['visitors']:,.0f}人",
                                         f"前年比 {_pct(_info['visitor_pct'])}", delta_color="off")
+                    st.caption("8ステップ：自動取得の接続待ち。接続後、同じ集計期間の実施数を表示します。")
                     _rows = _info["stores"]
                     _good = sorted((r for r in _rows if r["status"] == "好調"),
                                    key=lambda r: (r["sales_pct"], r["visitor_pct"]), reverse=True)[:3]
