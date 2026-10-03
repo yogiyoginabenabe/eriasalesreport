@@ -3389,12 +3389,54 @@ elif st.session_state.get('current_page', 'summary') == 'report':
         )
 
     cur = hist[(hist["代行会社"] == agency) & (hist["日付"].dt.date >= start_date) & (hist["日付"].dt.date <= end_date)].copy()
+
+    # 会社別レポートの前年比較は、日別履歴だけに依存しない。
+    # 「売上・前年データ取得」で保存される sales_summary_cache を正本として優先し、
+    # 取得直後でも週次・月次の前年値をそのまま表示できるようにする。
+    _report_summary_cache = _load_summary_cache_from_db()
+    def _summary_period_as_history(period_code, range_start, range_end):
+        if _report_summary_cache.empty:
+            return pd.DataFrame(columns=hist.columns)
+        sub = _report_summary_cache[
+            (_report_summary_cache["集計単位"] == period_code) &
+            (_report_summary_cache["開始日"] == range_start.strftime("%Y-%m-%d")) &
+            (_report_summary_cache["終了日"] == range_end.strftime("%Y-%m-%d")) &
+            (_report_summary_cache["店舗名"].isin(agency_stores))
+        ].copy()
+        if sub.empty:
+            return pd.DataFrame(columns=hist.columns)
+        sub["日付"] = pd.to_datetime(range_end)
+        sub["代行会社"] = agency
+        # _rval が必要とする列だけで十分。履歴と同じ列名へ揃える。
+        return sub[["日付", "店舗名", "代行会社", "指標", "値"]].copy()
+
     # 前年は「今年の実績取得済み期間」ではなく、対象週全体を同曜日で比較する。
     # 例：2026/09/21(月)〜09/27(日) → 2025/09/22(月)〜09/28(日)
     # 土曜・日曜レポートでは今年実績が前日まででも、前年は週末まで7日間集計する。
-    prev_start = target_start_date - pd.Timedelta(weeks=52)
-    prev_end = target_end_date - pd.Timedelta(weeks=52)
-    prev = hist[(hist["代行会社"] == agency) & (hist["日付"].dt.date >= prev_start) & (hist["日付"].dt.date <= prev_end)].copy()
+    if report_type.startswith("月次"):
+        try:
+            prev_start = target_start_date.replace(year=target_start_date.year - 1)
+            prev_end = target_end_date.replace(year=target_end_date.year - 1)
+        except ValueError:
+            prev_start = target_start_date.replace(year=target_start_date.year - 1, day=28)
+            prev_end = target_end_date.replace(year=target_end_date.year - 1, day=28)
+    else:
+        prev_start = target_start_date - pd.Timedelta(weeks=52)
+        prev_end = target_end_date - pd.Timedelta(weeks=52)
+
+    _cached_prev = _summary_period_as_history(
+        _report_summary_period, prev_start, prev_end
+    )
+    if not _cached_prev.empty:
+        prev = _cached_prev
+    else:
+        # 過去に日別履歴へ保存済みの場合のフォールバック。
+        prev = hist[
+            (hist["代行会社"] == agency) &
+            (hist["日付"].dt.date >= prev_start) &
+            (hist["日付"].dt.date <= prev_end)
+        ].copy()
+
     tgt = tgt_hist[(tgt_hist["店舗名"].isin(agency_stores)) &
                    (pd.to_datetime(tgt_hist["日付"]).dt.date >= target_start_date) &
                    (pd.to_datetime(tgt_hist["日付"]).dt.date <= target_end_date)].copy() if not tgt_hist.empty else _empty_history()
@@ -3402,6 +3444,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
     st.caption(
         f"📅 実績：{start_date:%Y/%m/%d}〜{end_date:%Y/%m/%d}"
         f"　｜　目標：{target_start_date:%Y/%m/%d}〜{target_end_date:%Y/%m/%d}"
+        f"　｜　前年：{prev_start:%Y/%m/%d}〜{prev_end:%Y/%m/%d}"
         f"　｜　{agency}"
     )
     if cur.empty:
