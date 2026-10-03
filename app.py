@@ -1944,9 +1944,20 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                                 else None
                             ),
                         )
+                        _prev_hint_start = (
+                            _summary_request_start - datetime.timedelta(weeks=52)
+                            if _summary_period_code == "w"
+                            else _summary_request_start.replace(year=_summary_request_start.year - 1)
+                        )
+                        _prev_hint_end = (
+                            _summary_request_end - datetime.timedelta(weeks=52)
+                            if _summary_period_code == "w"
+                            else _summary_request_end.replace(year=_summary_request_end.year - 1)
+                        )
                         st.session_state["_summary_fetch_started"] = (
-                            f"{_summary_request_start:%Y/%m/%d}〜{_summary_request_end:%Y/%m/%d}の取得を開始しました。"
-                            "当月は前日の日別実績も同時に更新します。完了後に「取得結果を再読込」を押してください。"
+                            f"今年 {_summary_request_start:%Y/%m/%d}〜{_summary_request_end:%Y/%m/%d} と "
+                            f"前年 {_prev_hint_start:%Y/%m/%d}〜{_prev_hint_end:%Y/%m/%d} の取得を開始しました。"
+                            "取得処理では今年・前年をセットで保存します。完了後に「取得結果を再読込」を押してください。"
                         )
                     except Exception as exc:
                         st.error(str(exc))
