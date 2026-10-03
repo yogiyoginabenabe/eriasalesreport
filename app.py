@@ -3839,8 +3839,8 @@ elif st.session_state.get('current_page', 'summary') == 'report':
                     st.warning("レポート本文のナレッジ保存だけ失敗しました。生成本文はそのまま利用できます。")
             except Exception as exc:
                 st.error(f"AIレポートを生成できませんでした：{exc}")
-        else:
-            st.info("AI文章生成を有効にするには、Streamlit Secretsへ GEMINI_API_KEY を追加してください。")
+    else:
+        st.info("AI文章生成を有効にするには、Streamlit Secretsへ GEMINI_API_KEY を追加してください。")
 
     generated = st.session_state.get("_generated_tunag", {})
     if generated.get("key") == generation_key:
