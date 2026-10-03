@@ -1328,6 +1328,34 @@ def _trigger_sales_backfill(start_date, end_date, summary_period=None, daily_dat
         raise RuntimeError(f"取得処理の開始に失敗しました（HTTP {exc.code}）：{detail}") from exc
 
 
+def _summary_cache_has_period(period_code, start_date, end_date):
+    """今年・前年の高速サマリーが両方DBへ保存済みか確認する。"""
+    try:
+        _load_summary_cache_from_db.clear()
+        df = _load_summary_cache_from_db()
+        if df.empty:
+            return False
+        if period_code == "w":
+            prev_start = start_date - datetime.timedelta(weeks=52)
+            prev_end = end_date - datetime.timedelta(weeks=52)
+        else:
+            try:
+                prev_start = start_date.replace(year=start_date.year - 1)
+                prev_end = end_date.replace(year=end_date.year - 1)
+            except ValueError:
+                prev_start = start_date.replace(year=start_date.year - 1, day=28)
+                prev_end = end_date.replace(year=end_date.year - 1, day=28)
+        def _exists(s, e):
+            return not df[
+                (df["集計単位"] == period_code) &
+                (df["開始日"] == s.strftime("%Y-%m-%d")) &
+                (df["終了日"] == e.strftime("%Y-%m-%d"))
+            ].empty
+        return _exists(start_date, end_date) and _exists(prev_start, prev_end)
+    except Exception:
+        return False
+
+
 def _trigger_manager_report_fetch(start_date, end_date):
     """画面から日報CSVだけを指定期間で再取得する。"""
     import urllib.error
@@ -1956,9 +1984,14 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                         )
                         st.session_state["_summary_fetch_started"] = (
                             f"今年 {_summary_request_start:%Y/%m/%d}〜{_summary_request_end:%Y/%m/%d} と "
-                            f"前年 {_prev_hint_start:%Y/%m/%d}〜{_prev_hint_end:%Y/%m/%d} の取得を開始しました。"
-                            "取得処理では今年・前年をセットで保存します。完了後に「取得結果を再読込」を押してください。"
+                            f"前年 {_prev_hint_start:%Y/%m/%d}〜{_prev_hint_end:%Y/%m/%d} を取得中です。"
+                            "完了すると自動で画面を更新します。"
                         )
+                        st.session_state["_summary_fetch_watch"] = {
+                            "period": _summary_period_code,
+                            "start": _summary_request_start.strftime("%Y-%m-%d"),
+                            "end": _summary_request_end.strftime("%Y-%m-%d"),
+                        }
                     except Exception as exc:
                         st.error(str(exc))
         with refresh_col:
@@ -1967,11 +2000,30 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                 _load_summary_cache_from_db.clear()
                 st.session_state.pop("_sales_history", None)
                 st.session_state.pop("_summary_fetch_started", None)
+                st.session_state.pop("_summary_fetch_watch", None)
                 st.rerun()
         with note_col:
             st.caption("月間累計の前年欄は前年同月全体、W1などの前年欄は52週前の同週全体です。TOPのMTDとは比較範囲が異なります。")
         if st.session_state.get("_summary_fetch_started"):
             st.success(st.session_state["_summary_fetch_started"])
+
+        # 取得後に「再読込」を押さなくても、今年・前年が揃った瞬間に自動反映する。
+        _summary_watch = st.session_state.get("_summary_fetch_watch")
+        if _summary_watch:
+            @st.fragment(run_every=5)
+            def _watch_summary_fetch():
+                _watch_start = pd.to_datetime(_summary_watch["start"]).date()
+                _watch_end = pd.to_datetime(_summary_watch["end"]).date()
+                if _summary_cache_has_period(_summary_watch["period"], _watch_start, _watch_end):
+                    st.session_state.pop("_summary_fetch_watch", None)
+                    st.session_state.pop("_summary_fetch_started", None)
+                    _load_sales_history_from_db.clear()
+                    _load_summary_cache_from_db.clear()
+                    st.session_state.pop("_sales_history", None)
+                    st.rerun()
+                else:
+                    st.caption("⏳ 今年・前年データの取得完了を確認中…（5秒ごとに自動確認）")
+            _watch_summary_fetch()
 
         # 期間に合わせて日付列を絞り込み
         if sel_week_range is None:
@@ -3201,6 +3253,66 @@ elif st.session_state.get('current_page', 'summary') == 'report':
     agency_stores = sorted(
         active_master.loc[active_master["代行会社"] == agency, "店舗名"].unique()
     )
+
+    # 売上・前年データもこの画面から取得できるようにする。
+    # 週次は52週前、月次は前年同月を同じ取得処理で保存する。
+    _report_summary_period = "m" if report_type.startswith("月次") else "w"
+    _report_fetch_start = target_start_date
+    _report_fetch_end = target_end_date
+    sales_fetch_col, sales_reload_col, sales_note_col = st.columns([1.4, 1.3, 4])
+    with sales_fetch_col:
+        if st.button("⬇️ 売上・前年データ取得", type="primary", use_container_width=True, key="agency_sales_fetch"):
+            with st.spinner("今年・前年データの取得を開始しています..."):
+                try:
+                    _trigger_sales_backfill(
+                        _report_fetch_start,
+                        _report_fetch_end,
+                        _report_summary_period,
+                        daily_date=(
+                            min(report_date - pd.Timedelta(days=1), _jst_today() - datetime.timedelta(days=1))
+                            if report_date.year == _jst_today().year and report_date.month == _jst_today().month
+                            else None
+                        ),
+                    )
+                    st.session_state["_agency_sales_fetch_watch"] = {
+                        "period": _report_summary_period,
+                        "start": _report_fetch_start.strftime("%Y-%m-%d"),
+                        "end": _report_fetch_end.strftime("%Y-%m-%d"),
+                    }
+                    st.session_state["_agency_sales_fetch_started"] = "今年・前年データを取得中です。完了すると自動で画面を更新します。"
+                except Exception as exc:
+                    st.error(str(exc))
+    with sales_reload_col:
+        if st.button("🔄 売上データを再読込", use_container_width=True, key="agency_sales_reload"):
+            _load_sales_history_from_db.clear()
+            _load_summary_cache_from_db.clear()
+            st.session_state.pop("_sales_history", None)
+            st.session_state.pop("_agency_sales_fetch_watch", None)
+            st.session_state.pop("_agency_sales_fetch_started", None)
+            st.rerun()
+    with sales_note_col:
+        st.caption(
+            f"取得対象：{_report_fetch_start:%Y/%m/%d}〜{_report_fetch_end:%Y/%m/%d}"
+            "｜今年・前年をセットで取得します。"
+        )
+    if st.session_state.get("_agency_sales_fetch_started"):
+        st.success(st.session_state["_agency_sales_fetch_started"])
+    _agency_sales_watch = st.session_state.get("_agency_sales_fetch_watch")
+    if _agency_sales_watch:
+        @st.fragment(run_every=5)
+        def _watch_agency_sales_fetch():
+            _watch_start = pd.to_datetime(_agency_sales_watch["start"]).date()
+            _watch_end = pd.to_datetime(_agency_sales_watch["end"]).date()
+            if _summary_cache_has_period(_agency_sales_watch["period"], _watch_start, _watch_end):
+                st.session_state.pop("_agency_sales_fetch_watch", None)
+                st.session_state.pop("_agency_sales_fetch_started", None)
+                _load_sales_history_from_db.clear()
+                _load_summary_cache_from_db.clear()
+                st.session_state.pop("_sales_history", None)
+                st.rerun()
+            else:
+                st.caption("⏳ 売上・前年データの取得完了を確認中…（5秒ごとに自動確認）")
+        _watch_agency_sales_fetch()
 
     # 日報の対象期間：レポート種別に応じた振り返り範囲を使う
     if report_type.startswith("月次"):
