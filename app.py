@@ -3524,7 +3524,12 @@ elif st.session_state.get('current_page', 'summary') == 'report':
     )
 
     st.markdown("### 📋 キャプチャ用サマリー")
-    st.caption("基準日から対象週（W1・W2…）を自動判定し、前日までの実績と週目標を比較して、週末までの残額・残座数を表示します。全項目がAI生成するTUNAG投稿文にも連動します。")
+    st.markdown(
+        f"**対象期間｜実績：{start_date:%Y/%m/%d}〜{end_date:%Y/%m/%d}"
+        f"　｜　目標：{target_start_date:%Y/%m/%d}〜{target_end_date:%Y/%m/%d}"
+        f"　｜　前年：{prev_start:%Y/%m/%d}〜{prev_end:%Y/%m/%d}**"
+    )
+    st.caption(f"対象：{agency}｜キャプチャだけでも比較期間が分かるよう、実績・目標・前年の期間を表の直上に表示しています。")
 
     def _report_fmt(value, unit):
         if value is None or pd.isna(value):
