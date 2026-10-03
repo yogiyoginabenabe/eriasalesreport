@@ -3379,14 +3379,26 @@ elif st.session_state.get('current_page', 'summary') == 'report':
             detail = min(len(text_all), 500) / 25
             return recency + action + effort + sales + detail
 
-        agency_reports["_優先スコア"] = agency_reports.apply(_report_score, axis=1)
-        report_source_limit = 12 if report_type.startswith("月次") else 5
-        selected_reports = (
-            agency_reports.sort_values(["_優先スコア", "日付"], ascending=[False, False])
-            .drop_duplicates(subset=["店舗名"], keep="first")
-            .head(report_source_limit)
-            .copy()
-        )
+        # 本文がすべて空の日報はAIレスポンス対象から除外する。
+        # 「—」だけの空日報に対してAIが内容を補完・推測して返信するのを防ぐ。
+        _response_cols = ["グッド！", "オポチュニティ↑", "個人的なこと", "改善要望"]
+        def _has_report_content(row):
+            for col in _response_cols:
+                value = str(row.get(col, "") or "").strip()
+                if value and value not in {"—", "-", "ー", "―", "nan", "None"}:
+                    return True
+            return False
+
+        agency_reports = agency_reports[agency_reports.apply(_has_report_content, axis=1)].copy()
+        if not agency_reports.empty:
+            agency_reports["_優先スコア"] = agency_reports.apply(_report_score, axis=1)
+            report_source_limit = 12 if report_type.startswith("月次") else 5
+            selected_reports = (
+                agency_reports.sort_values(["_優先スコア", "日付"], ascending=[False, False])
+                .drop_duplicates(subset=["店舗名"], keep="first")
+                .head(report_source_limit)
+                .copy()
+            )
 
     cur = hist[(hist["代行会社"] == agency) & (hist["日付"].dt.date >= start_date) & (hist["日付"].dt.date <= end_date)].copy()
 
@@ -3642,13 +3654,15 @@ elif st.session_state.get('current_page', 'summary') == 'report':
     # Gemini APIが設定済みの場合のみ、選定した日報と売上データから文章を生成
     generation_key = f"{agency}|{report_date}|{report_type}|{getattr(daily_report_file, 'name', '')}|{report_context.strip()}"
     gemini_api_key = st.secrets.get("GEMINI_API_KEY", "")
-    if not selected_reports.empty:
-        if gemini_api_key:
-            if st.button("✨ AIレポートを生成", type="primary", key="generate_grounded_report"):
+    if gemini_api_key:
+        if st.button("✨ AIレポートを生成", type="primary", key="generate_grounded_report"):
+            if not selected_reports.empty:
                 report_sources = selected_reports[
                     ["日付", "店舗名", "マネージャー名", "グッド！", "オポチュニティ↑", "個人的なこと", "改善要望"]
                 ].copy()
                 report_sources["日付"] = report_sources["日付"].dt.strftime("%Y/%m/%d")
+            else:
+                report_sources = pd.DataFrame(columns=["日付", "店舗名", "マネージャー名", "グッド！", "オポチュニティ↑", "個人的なこと", "改善要望"])
 
                 saved_report_context = _agency_report_context(
                     agency, target_start_date, target_end_date, report_date, report_type
@@ -3756,6 +3770,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
 - SM日報レスポンスは日報原文の事実に忠実にする。別々に書かれた内容を推測で結びつけず、本人が書いていない目的・意図・施策を付け足さない。
 - 日報で確認できる具体的なGoodや成果には、評価だけで終わらず、その行動・成果への自然な感謝を伝える。改善点は日報または数値に明確な根拠がある場合だけ伝える。
 - SM日報レスポンスの見出しは「●氏名さん：」とし、店舗名は付けない。
+- 【選定済み日報】が0件、または実質的に空欄しかない場合は【SM日報レスポンス】セクション自体を出力しない。存在しない日報内容を推測・補完して返信しない。その場合は「タイトル→全体分析→アクション→締め」の構成にする。
 - 座数の単位は必ず「人」とする。「座」「座数256座」のような表記は禁止し、「座数256人」「256人」のように表記する。
 - 数値表記は、前年比の％は小数点以下を四捨五入して整数で表示する（例：121.09％→121％、155.69％→156％）。
 - CVRの実績値は小数点以下第1位まで表示し、第2位以下を四捨五入する（例：26.04％→26.0％、50.10％→50.1％）。
