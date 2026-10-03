@@ -3664,12 +3664,12 @@ elif st.session_state.get('current_page', 'summary') == 'report':
             else:
                 report_sources = pd.DataFrame(columns=["日付", "店舗名", "マネージャー名", "グッド！", "オポチュニティ↑", "個人的なこと", "改善要望"])
 
-                saved_report_context = _agency_report_context(
-                    agency, target_start_date, target_end_date, report_date, report_type
-                )
+        saved_report_context = _agency_report_context(
+                agency, target_start_date, target_end_date, report_date, report_type
+            )
 
-                if report_type.startswith("月次"):
-                    structure_instruction = """
+            if report_type.startswith("月次"):
+                structure_instruction = """
 【月次・月間振り返り型】
 1. 【月次｜レポート】
 2. 1か月の総括として、対象会社の月間実績・目標・前年を軸に、月内に蓄積された同一会社のレポートと日報をつなげる。
@@ -3684,8 +3684,8 @@ elif st.session_state.get('current_page', 'summary') == 'report':
    月間数値と蓄積ナレッジから、翌月に全店舗で徹底する重点行動を3項目程度に絞り、店頭で実行できる動作まで具体化する。
 8. 月間の努力を認めつつ、翌月の行動につながる短く力強い締めにする。
 """
-                elif report_type.startswith("月曜"):
-                    structure_instruction = """
+            elif report_type.startswith("月曜"):
+                structure_instruction = """
 【月曜・週次レポート型】
 1. 【週次｜レポート】
 2. 月曜は1週間の「総括」であり、土日レポートより内容を薄くしない。【同一会社の保存済みレポート】がある場合は必ず読み、週の途中で何を課題として伝えたか→店舗がどう動いたか→最終着地がどうなったか、という時間軸で3〜5段落にまとめる。
@@ -3705,8 +3705,8 @@ elif st.session_state.get('current_page', 'summary') == 'report':
    背景説明や同じ目的の繰り返しは省き、店舗がそのまま実行できる要点だけを書く。
 8. 次週を前向きに迎えられる、短く力強い締め。
 """
-                else:
-                    structure_instruction = """
+            else:
+                structure_instruction = """
 【土曜・日曜のブーストレポート型】
 1. データから導ける短く熱い見出しを【○○🔥】の形で作る。
    スマートフォンで1行表示しやすいよう、会社名は入れず、括弧と絵文字を含めて全角24文字程度以内にする。根拠なく達成を断言しない。
@@ -3731,7 +3731,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
 6. エリア全体を鼓舞する2〜3文の力強い締め。
 """
 
-                prompt = f"""
+            prompt = f"""
 あなたはYogiboのエリアマネージャー向け社内投稿を作成します。
 以下の【売上サマリー】【選定済み日報】【同一会社の保存済みレポート】【渡邊AMからの追加情報】を根拠に、日本語のTUNAG投稿文を作成してください。
 
@@ -3796,49 +3796,49 @@ elif st.session_state.get('current_page', 'summary') == 'report':
 【渡邊AMからの追加情報】
 {report_context.strip() if report_context.strip() else "追加情報なし"}
 """
-                try:
-                    import time
-                    from google import genai
-                    client = genai.Client(api_key=gemini_api_key)
-                    generated_text = ""
-                    used_model = ""
-                    last_error = None
-                    # 混雑時は安定版・軽量版へ自動的に切り替える
-                    for model_name in ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite"]:
-                        try:
-                            response = client.models.generate_content(model=model_name, contents=prompt)
-                            generated_text = (response.text or "").strip()
-                            if generated_text:
-                                used_model = model_name
-                                break
-                            last_error = ValueError("AIから文章が返されませんでした。")
-                        except Exception as model_error:
-                            last_error = model_error
-                            error_text = str(model_error)
-                            if any(code in error_text for code in ["503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED"]):
-                                time.sleep(1)
-                                continue
-                            raise
-                    if not generated_text:
-                        raise last_error or ValueError("AIから文章が返されませんでした。")
-                    st.session_state["_generated_tunag"] = {"key": generation_key, "text": generated_text}
-                    knowledge_saved = _save_agency_report_knowledge(
-                        agency=agency,
-                        report_date=report_date,
-                        week_start=target_start_date,
-                        week_end=target_end_date,
-                        report_type=report_type,
-                        actual_start=start_date,
-                        actual_end=end_date,
-                        body=generated_text,
-                    )
-                    if knowledge_saved:
-                        st.success(f"レポートを生成し、{agency}のAIナレッジへ保存しました（{used_model}）。")
-                    else:
-                        st.success(f"レポートを生成しました（{used_model}）。")
-                        st.warning("レポート本文のナレッジ保存だけ失敗しました。生成本文はそのまま利用できます。")
-                except Exception as exc:
-                    st.error(f"AIレポートを生成できませんでした：{exc}")
+            try:
+                import time
+                from google import genai
+                client = genai.Client(api_key=gemini_api_key)
+                generated_text = ""
+                used_model = ""
+                last_error = None
+                # 混雑時は安定版・軽量版へ自動的に切り替える
+                for model_name in ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite"]:
+                    try:
+                        response = client.models.generate_content(model=model_name, contents=prompt)
+                        generated_text = (response.text or "").strip()
+                        if generated_text:
+                            used_model = model_name
+                            break
+                        last_error = ValueError("AIから文章が返されませんでした。")
+                    except Exception as model_error:
+                        last_error = model_error
+                        error_text = str(model_error)
+                        if any(code in error_text for code in ["503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED"]):
+                            time.sleep(1)
+                            continue
+                        raise
+                if not generated_text:
+                    raise last_error or ValueError("AIから文章が返されませんでした。")
+                st.session_state["_generated_tunag"] = {"key": generation_key, "text": generated_text}
+                knowledge_saved = _save_agency_report_knowledge(
+                    agency=agency,
+                    report_date=report_date,
+                    week_start=target_start_date,
+                    week_end=target_end_date,
+                    report_type=report_type,
+                    actual_start=start_date,
+                    actual_end=end_date,
+                    body=generated_text,
+                )
+                if knowledge_saved:
+                    st.success(f"レポートを生成し、{agency}のAIナレッジへ保存しました（{used_model}）。")
+                else:
+                    st.success(f"レポートを生成しました（{used_model}）。")
+                    st.warning("レポート本文のナレッジ保存だけ失敗しました。生成本文はそのまま利用できます。")
+            except Exception as exc:
+                st.error(f"AIレポートを生成できませんでした：{exc}")
         else:
             st.info("AI文章生成を有効にするには、Streamlit Secretsへ GEMINI_API_KEY を追加してください。")
 
