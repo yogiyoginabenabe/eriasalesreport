@@ -782,28 +782,28 @@ def fiscal_period_range(fiscal_year, period_kind, period_value=None):
         month = int(str(period_value).replace("月", ""))
         year = fiscal_year if month >= 3 else fiscal_year + 1
         import calendar
-        return datetime.date(year, month, 1), datetime.date(year, month, calendar.monthrange(year, month)[1])
+        return _datetime_global.date(year, month, 1), _datetime_global.date(year, month, calendar.monthrange(year, month)[1])
     if period_kind == "年度":
         import calendar
         end_year = fiscal_year + 1
-        return datetime.date(fiscal_year, 3, 1), datetime.date(end_year, 2, calendar.monthrange(end_year, 2)[1])
+        return _datetime_global.date(fiscal_year, 3, 1), _datetime_global.date(end_year, 2, calendar.monthrange(end_year, 2)[1])
     if period_kind == "半期":
         month = 3 if period_value == "上期" else 9
-        start = datetime.date(fiscal_year, month, 1)
+        start = _datetime_global.date(fiscal_year, month, 1)
         end_month = 8 if period_value == "上期" else 2
         end_year = fiscal_year if period_value == "上期" else fiscal_year + 1
         end_day = 28 if end_month == 2 else 31
-        return start, datetime.date(end_year, end_month, end_day)
+        return start, _datetime_global.date(end_year, end_month, end_day)
     q_months = {"Q1": 3, "Q2": 6, "Q3": 9, "Q4": 12}
     month = q_months.get(period_value, 3)
-    start = datetime.date(fiscal_year, month, 1)
+    start = _datetime_global.date(fiscal_year, month, 1)
     end_month = month + 2
     end_year = fiscal_year
     if end_month > 12:
         end_month -= 12
         end_year += 1
     import calendar
-    return start, datetime.date(end_year, end_month, calendar.monthrange(end_year, end_month)[1])
+    return start, _datetime_global.date(end_year, end_month, calendar.monthrange(end_year, end_month)[1])
 
 def yoy_delta(now, prev):
     """前年比を返す（100%基準）例：前年比103%→3.0ではなく103.0を返す"""
@@ -844,10 +844,10 @@ def get_yoy_prev_days(now_dates_md, mode="dow", now_year=None, prev_year=None):
             m, d = int(md.split('/')[0]), int(md.split('/')[1])
             if mode == "dow":
                 # 52週前（364日）= 必ず同曜日
-                now_date  = datetime.date(now_year, m, d)
-                prev_date = now_date - datetime.timedelta(weeks=52)
+                now_date  = _datetime_global.date(now_year, m, d)
+                prev_date = now_date - _datetime_global.timedelta(weeks=52)
             else:
-                prev_date = datetime.date(prev_year, m, d)
+                prev_date = _datetime_global.date(prev_year, m, d)
             mapping[md] = f"{prev_date.month:02d}/{prev_date.day:02d}"
         except:
             pass
@@ -871,10 +871,10 @@ def get_yoy_prev_days_from_prev(prev_dates_md, mode="dow", now_year=None, prev_y
             m, d = int(md.split('/')[0]), int(md.split('/')[1])
             if mode == "dow":
                 # 前年日付 + 364日 = 今年の対応日付
-                prev_date = datetime.date(prev_year, m, d)
-                now_date  = prev_date + datetime.timedelta(weeks=52)
+                prev_date = _datetime_global.date(prev_year, m, d)
+                now_date  = prev_date + _datetime_global.timedelta(weeks=52)
             else:
-                now_date = datetime.date(now_year, m, d)
+                now_date = _datetime_global.date(now_year, m, d)
             now_md = f"{now_date.month:02d}/{now_date.day:02d}"
             mapping[now_md] = md
         except:
@@ -899,7 +899,7 @@ def _build_target_index(targets: dict) -> dict:
         prefix, date_str = parts
         try:
             dp = date_str.split('/')
-            d = datetime.date(int(dp[0]), int(dp[1]), int(dp[2]))
+            d = _datetime_global.date(int(dp[0]), int(dp[1]), int(dp[2]))
         except:
             continue
         # prefix = "店舗名_指標" を分解
@@ -1336,8 +1336,8 @@ def _summary_cache_has_period(period_code, start_date, end_date):
         if df.empty:
             return False
         if period_code == "w":
-            prev_start = start_date - datetime.timedelta(weeks=52)
-            prev_end = end_date - datetime.timedelta(weeks=52)
+            prev_start = start_date - _datetime_global.timedelta(weeks=52)
+            prev_end = end_date - _datetime_global.timedelta(weeks=52)
         else:
             try:
                 prev_start = start_date.replace(year=start_date.year - 1)
@@ -1921,34 +1921,34 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
             week_options = ["月間累計"]
             week_date_ranges = [None]
             dow_jp = ["月","火","水","木","金","土","日"]
-            _first = datetime.date(sel_year, sel_month_num, 1)
+            _first = _datetime_global.date(sel_year, sel_month_num, 1)
             _last_day = cal_mod.monthrange(sel_year, sel_month_num)[1]
-            _last = datetime.date(sel_year, sel_month_num, _last_day)
+            _last = _datetime_global.date(sel_year, sel_month_num, _last_day)
             _cur = _first
             _wi = 1
             while _cur <= _last:
                 _days_to_sun = (6 - _cur.weekday()) % 7
-                _week_end = min(_cur + datetime.timedelta(days=_days_to_sun), _last)
+                _week_end = min(_cur + _datetime_global.timedelta(days=_days_to_sun), _last)
                 _s_dow = dow_jp[_cur.weekday()]
                 _e_dow = dow_jp[_week_end.weekday()]
                 _label = f"W{_wi}\u30004/{_cur.day}({_s_dow})\uff5e{sel_month_num}/{_week_end.day}({_e_dow})"
                 _label = f"W{_wi}　{sel_month_num}/{_cur.day}({_s_dow})〜{sel_month_num}/{_week_end.day}({_e_dow})"
                 week_options.append(_label)
                 week_date_ranges.append((_cur, _week_end))
-                _cur = _week_end + datetime.timedelta(days=1)
+                _cur = _week_end + _datetime_global.timedelta(days=1)
                 _wi += 1
             sel_week_label = st.selectbox("週", week_options, index=0, key="ov_week")
             sel_week_idx   = week_options.index(sel_week_label)
             sel_week_range = week_date_ranges[sel_week_idx]
     
-        _summary_month_start = datetime.date(sel_year, sel_month_num, 1)
-        _summary_month_end = datetime.date(sel_year, sel_month_num, cal_mod.monthrange(sel_year, sel_month_num)[1])
+        _summary_month_start = _datetime_global.date(sel_year, sel_month_num, 1)
+        _summary_month_end = _datetime_global.date(sel_year, sel_month_num, cal_mod.monthrange(sel_year, sel_month_num)[1])
         if sel_week_range is None:
             _summary_request_start, _summary_request_end, _summary_period_code = _summary_month_start, _summary_month_end, "m"
         else:
             _summary_request_start, _summary_request_end = sel_week_range
             _summary_period_code = "w"
-        _summary_yesterday = _jst_today() - datetime.timedelta(days=1)
+        _summary_yesterday = _jst_today() - _datetime_global.timedelta(days=1)
         # 売上管理表の比較期間は、当年のデータ最終日では切らない。
         # 月間累計は前年同月全体、週選択は52週前の同週全体を比較する。
         # 当年実績は日別DBに存在する日だけが自然に集計される。
@@ -1973,12 +1973,12 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
                             ),
                         )
                         _prev_hint_start = (
-                            _summary_request_start - datetime.timedelta(weeks=52)
+                            _summary_request_start - _datetime_global.timedelta(weeks=52)
                             if _summary_period_code == "w"
                             else _summary_request_start.replace(year=_summary_request_start.year - 1)
                         )
                         _prev_hint_end = (
-                            _summary_request_end - datetime.timedelta(weeks=52)
+                            _summary_request_end - _datetime_global.timedelta(weeks=52)
                             if _summary_period_code == "w"
                             else _summary_request_end.replace(year=_summary_request_end.year - 1)
                         )
@@ -2048,8 +2048,8 @@ if st.session_state.get('current_page', 'top') in ('top', 'summary'):
         ].copy() if not _summary_cache_all.empty else pd.DataFrame()
 
         if _summary_period_code == "w":
-            _prev_req_start = _summary_request_start - datetime.timedelta(weeks=52)
-            _prev_req_end = _summary_request_end - datetime.timedelta(weeks=52)
+            _prev_req_start = _summary_request_start - _datetime_global.timedelta(weeks=52)
+            _prev_req_end = _summary_request_end - _datetime_global.timedelta(weeks=52)
         else:
             try:
                 _prev_req_start = _summary_request_start.replace(year=_summary_request_start.year - 1)
@@ -2585,7 +2585,7 @@ elif st.session_state.get('current_page', 'summary') == 'detail':
             return total
         # フォールバック：月間目標×日数按分
         total_days = calendar.monthrange(cutoff_date.year, cutoff_date.month)[1]
-        elapsed = (cutoff_date - datetime.date(cutoff_date.year, cutoff_date.month, 1)).days + 1
+        elapsed = (cutoff_date - _datetime_global.date(cutoff_date.year, cutoff_date.month, 1)).days + 1
         ratio = elapsed / total_days
         for sname in store_names:
             k = targets.get(f'{sname}_{metric}')
@@ -3269,7 +3269,7 @@ elif st.session_state.get('current_page', 'summary') == 'report':
                         _report_fetch_end,
                         _report_summary_period,
                         daily_date=(
-                            min(report_date - pd.Timedelta(days=1), _jst_today() - datetime.timedelta(days=1))
+                            min(report_date - pd.Timedelta(days=1), _jst_today() - _datetime_global.timedelta(days=1))
                             if report_date.year == _jst_today().year and report_date.month == _jst_today().month
                             else None
                         ),
